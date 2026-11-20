@@ -21,7 +21,7 @@ create table if not exists public.tasks (
   title text not null,
   date date,
   time text,                                   -- "HH:MM" oppure vuoto
-  area text not null default 'pers' check (area in ('uni','sport','lavoro','pers')),
+  area text not null default 'pers' check (area in ('uni','sport','lavoro','pers','eventi')),
   dl boolean not null default false,           -- true = scadenza (esame, consegna)
   done boolean not null default false,
   created_at timestamptz not null default now()
@@ -33,7 +33,7 @@ create table if not exists public.goals (
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   title text not null,
   month text not null,                         -- "AAAA-MM"
-  area text not null default 'pers' check (area in ('uni','sport','lavoro','pers')),
+  area text not null default 'pers' check (area in ('uni','sport','lavoro','pers','eventi')),
   done boolean not null default false,
   created_at timestamptz not null default now()
 );

@@ -35,7 +35,7 @@ window.AGENDA_CONFIG = {
   // Impegni ricorrenti.
   // - weekdays: giorni della settimana; oppure everyDays + anchor (data di partenza)
   // - from / to: periodo di validità (facoltativi, formato AAAA-MM-GG)
-  // - area: uni | sport | lavoro | pers
+  // - area: uni | sport | lavoro | pers | eventi
   recurring: [
     { name: "Laboratorio di urbanistica", weekdays: [2, 3], t: "14:00", end: "19:30", area: "uni", from: "2026-09-01", to: null },
     { name: "Pulizia della camera", everyDays: 14, anchor: "2026-11-21", t: "11:30", area: "pers" }

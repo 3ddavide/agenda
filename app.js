@@ -3,7 +3,7 @@
 {
 const C = window.AGENDA_CONFIG || {};
 const HAB = (C.habits || []).map(h => [h.k, h.label]);
-const AREE = { uni: 'Università', sport: 'Sport', lavoro: 'Lavoro', pers: 'Personale' };
+const AREE = { uni: 'Università', sport: 'Sport', lavoro: 'Lavoro', pers: 'Personale', eventi: 'Eventi' };
 const TRAIN = C.training || {};
 const UNI = C.uni || { days: [], start: '', end: '' };
 const REC = C.recurring || [];
@@ -168,7 +168,7 @@ function viewMese() {
   const goals = Object.entries(S.goals).filter(([, g]) => g.month === mk);
   return `<div class="navrow"><button data-act="mo" data-v="-1" aria-label="Mese precedente">‹</button><h1>${MM[first.getMonth()]} ${first.getFullYear()}</h1><button data-act="mo" data-v="1" aria-label="Mese successivo">›</button></div>
   <section class="card"><div class="cal">${['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map(x => `<span class="wd">${x}</span>`).join('')}${cells}</div>
-  <div class="legend"><span>Più è blu il giorno, più abitudini hai rispettato</span><span><i class="dot uni"></i>Università</span><span><i class="dot sport"></i>Sport</span><span><i class="dot lavoro"></i>Lavoro</span><span><i class="dot pers"></i>Personale</span><span><i class="dot" style="background:var(--red)"></i>Scadenza</span></div></section>
+  <div class="legend"><span>Più è blu il giorno, più abitudini hai rispettato</span><span><i class="dot uni"></i>Università</span><span><i class="dot sport"></i>Sport</span><span><i class="dot lavoro"></i>Lavoro</span><span><i class="dot pers"></i>Personale</span><span><i class="dot eventi"></i>Eventi</span><span><i class="dot" style="background:var(--red)"></i>Scadenza</span></div></section>
   <section class="card"><h2>${GG[sd.getDay()]} ${sd.getDate()} ${MM[sd.getMonth()]}</h2>${agenda(sd)}</section>
   <section class="card"><h2>Scadenze del mese</h2>${dls.length ? '<ul class="ag">' + dls.map(([id, t]) => { const d = parse(t.date); return `<li class="${t.done ? 'done' : ''}"><span class="tm">${d.getDate()} ${MM[d.getMonth()].slice(0, 3)}</span><span class="dot" style="background:var(--red)"></span><span class="tt">${esc(t.title)}</span><span class="acts"><button class="mini${t.done ? ' on' : ''}" data-act="done" data-id="${id}" aria-label="Segna come fatto">✓</button></span></li>`; }).join('') + '</ul>' : '<p class="empty">Nessuna scadenza. Aggiungile da “Aggiungi attività” spuntando “È una scadenza”.</p>'}</section>
   <section class="card"><h2>Obiettivi di ${MM[first.getMonth()]}</h2>

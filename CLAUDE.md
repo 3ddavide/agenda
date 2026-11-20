@@ -22,7 +22,7 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
 - `days` (chiave `user_id` + `date`): `h` = oggetto JSON abitudine → true/false
   (chiavi come in `config.js` → `habits[].k`), `top` = 3 priorità, `topd` = 3 booleani.
 - `tasks`: attività singole con `date`, `time` ("HH:MM" o vuoto), `area`
-  (`uni` | `sport` | `lavoro` | `pers`), `dl` (scadenza), `done`.
+  (`uni` | `sport` | `lavoro` | `pers` | `eventi`), `dl` (scadenza), `done`.
 - `goals`: obiettivi del mese con `month` ("AAAA-MM").
 - Gli impegni fissi (università, laboratorio, allenamenti, pulizia camera) NON sono nel
   database: vengono calcolati da `config.js` ogni volta che si apre l'app.
