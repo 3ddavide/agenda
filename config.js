@@ -5,8 +5,8 @@
 // 2) Tutto il resto è la tua settimana tipo: modificalo qui (o chiedi a Claude Code).
 
 window.AGENDA_CONFIG = {
-  supabaseUrl: "https://mpzyrywlzsacjnnlhxed.supabase.co",supabaseUrl:,
-  supabaseAnonKey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wenlyeXdsenNhY2pubmxoeGVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODA2MjAsImV4cCI6MjExMDc1NjYyMH0.aVOkHXrcb0DMSEQ30djPHNi2tmrKDamjdhlCZMAXytA
+  supabaseUrl: "https://mpzyrywlzsacjnnlhxed.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wenlyeXdsenNhY2pubmxoeGVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODA2MjAsImV4cCI6MjExMDc1NjYyMH0.aVOkHXrcb0DMSEQ30djPHNi2tmrKDamjdhlCZMAXytA",
 
   // Abitudini: la chiave (k) non va cambiata dopo che hai iniziato a usarle,
   // altrimenti lo storico di quella abitudine non viene più mostrato.
