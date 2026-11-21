@@ -294,7 +294,7 @@ function since(ds, today) {
 }
 // Un widget: icona squadrata, titolo, dato sintetico a destra; toccandolo si apre il pannello "p".
 const widget = (cls, p, icon, title, right, body) =>
-  `<div class="w glass ${cls}" data-act="open" data-p="${p}" role="button" tabindex="0" aria-label="${esc(title)}: apri"><div class="wh"><span class="ic">${svg(icon)}</span><span>${esc(title)}</span>${right || ''}</div><div class="wb">${body}</div></div>`;
+  `<div class="w glass ${cls}" data-act="open" data-p="${p}" role="button" tabindex="0" aria-label="${esc(title)}: apri"><div class="wh"><span class="ic">${svg(icon)}</span><span class="wt">${esc(title)}</span>${right || ''}</div><div class="wb">${body}</div></div>`;
 const badge = n => n ? `<span class="badge" aria-label="${n} da recuperare">${n}</span>` : '';
 let popKey = '';   // abitudine appena spuntata (per la piccola animazione)
 
@@ -517,8 +517,7 @@ function viewSett() {
   // Abitudini: griglia pallini (prime 3 righe + "+N").
   const rows = HAB.slice(0, 3), more = HAB.length - rows.length;
   const hg = `<div class="hg"><span></span>${days.map(d => `<span class="hl1${iso(d) === today ? ' td' : ''}">${GS[d.getDay()].charAt(0)}</span>`).join('')}
-    ${rows.map(([k, l]) => `<span class="hn">${esc(shortHab(k, l))}</span>${days.map(d => { const ds = iso(d); return `<i class="pd2 ${ds > today ? 'fut' : S.days[ds]?.h?.[k] ? 'on' : ''}"></i>`; }).join('')}`).join('')}
-    ${more > 0 ? `<span class="hn faint">+${more}</span>` : ''}</div>`;
+    ${rows.map(([k, l]) => `<span class="hn">${esc(shortHab(k, l))}</span>${days.map(d => { const ds = iso(d); return `<i class="pd2 ${ds > today ? 'fut' : S.days[ds]?.h?.[k] ? 'on' : ''}"></i>`; }).join('')}`).join('')}</div>`;
   // Giorni: impegno principale.
   const gi = `<ul class="gl">${days.map(d => { const ds = iso(d); return `<li class="${ds < today ? 'past' : ds === today ? 'td' : ''}"><b>${cap(DOW[d.getDay()])}</b><span>${esc(mainOf(d))}</span></li>`; }).join('')}</ul>`;
   // Allenamenti: fatti / previsti.
@@ -531,7 +530,7 @@ function viewSett() {
   // Review.
   const sun = new Date().getDay() === 0 && weekOff === 0;
   const rv = `<div class="pd"><p>${sun ? 'Oggi' : 'Domenica'}, 15 minuti.<br>Cosa ha funzionato e cosa no.</p><button class="pill${sun ? ' solid' : ''}" data-act="open" data-p="review">Apri</button></div>`;
-  return widget('a-hab', 'whab', 'habit', 'Abitudini', `<span class="meta">${pct === null ? '—' : pct + '%'}</span>`, hg)
+  return widget('a-hab', 'whab', 'habit', 'Abitudini', `<span class="meta">${more > 0 ? `<span class="faint">+${more} · </span>` : ''}${pct === null ? '—' : pct + '%'}</span>`, hg)
     + widget('a-gi', 'wdays', 'cal', 'Giorni', '', gi)
     + widget('a-al', 'wtrain', 'dumbbell', 'Allenamenti', '', al)
     + widget('a-pp', 'someday', 'inbox', 'Prima o poi', badge(sd.length), pp)
