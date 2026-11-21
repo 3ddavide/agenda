@@ -59,6 +59,21 @@ drop policy if exists "solo i miei obiettivi" on public.goals;
 create policy "solo i miei obiettivi" on public.goals
   for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
+-- Iscrizioni alle notifiche push (promemoria serale). L'invio e la programmazione
+-- con pg_cron sono in supabase/migrazione_promemoria_cron.sql.
+create table if not exists public.push_subs (
+  endpoint text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subs_user on public.push_subs (user_id);
+alter table public.push_subs enable row level security;
+drop policy if exists "solo le mie iscrizioni" on public.push_subs;
+create policy "solo le mie iscrizioni" on public.push_subs
+  for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
 -- Aggiorna updated_at quando cambi un giorno
 create or replace function public.touch_updated_at() returns trigger language plpgsql as $$
 begin new.updated_at = now(); return new; end $$;

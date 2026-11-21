@@ -28,6 +28,7 @@ const isRest = w => !plan(w).t;
 const S = { days: {}, tasks: {}, goals: {} };
 let sb = null, user = null, weekOff = 0, monthOff = 0, selDay = null, pending = false, lastDel = null, signup = false;
 let sheet = null;   // modulo aperto: { kind: 'task', id } oppure { kind: 'fx', ds, k }
+let pushState = 'unknown';   // promemoria: unknown | unsupported | denied | off | on
 const app = document.getElementById('app'), note = document.getElementById('note');
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
@@ -72,6 +73,49 @@ async function loadAll() {
   note.textContent = '';
   cacheSave();
   render();
+  if (pushState === 'unknown') pushInit();
+}
+
+// ---------- Promemoria (notifiche push) ----------
+// L'iPhone le permette solo se l'agenda è aperta dall'icona sulla schermata Home (iOS 16.4+).
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && !!C.vapidPublicKey;
+const b64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+async function saveSub(sub) {
+  const j = sub.toJSON();
+  const r = await sb.from('push_subs').upsert({ endpoint: j.endpoint, user_id: user.id, p256dh: j.keys.p256dh, auth: j.keys.auth }, { onConflict: 'endpoint' });
+  if (r.error) throw r.error;
+}
+async function pushInit() {
+  if (!pushOk()) { pushState = 'unsupported'; render(); return; }
+  try {
+    const reg = await navigator.serviceWorker.register('sw.js');
+    const sub = await reg.pushManager.getSubscription();
+    if (Notification.permission === 'denied') pushState = 'denied';
+    else if (sub && Notification.permission === 'granted') { pushState = 'on'; await saveSub(sub); }
+    else pushState = 'off';
+  } catch (e) { console.error(e); if (pushState === 'unknown') pushState = 'off'; }
+  render();
+}
+async function pushOn() {
+  const perm = await Notification.requestPermission();   // deve partire subito dal tocco sul pulsante
+  if (perm !== 'granted') { pushState = perm === 'denied' ? 'denied' : 'off'; render(true); flash('Notifiche non consentite'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(C.vapidPublicKey) });
+    await saveSub(sub);
+    pushState = 'on'; render(true); flash('Promemoria attivati: ogni sera alle 21:30');
+  } catch (e) { console.error(e); flash('Attivazione non riuscita: riprova'); }
+}
+async function pushTest() {
+  flash('Invio in corso…');
+  const { data, error } = await sb.functions.invoke('promemoria', { body: { mode: 'test' } });
+  if (error) { console.error(error); flash('Prova non riuscita: controlla la Edge Function'); return; }
+  flash(data && data.sent ? 'Inviata: arriva tra pochi secondi' : 'Nessun dispositivo iscritto');
+}
+function pushCard() {
+  if (pushState !== 'off') return '';
+  return `<section class="card"><h2>Promemoria serale</h2><p class="sub">Ogni sera alle 21:30 una notifica con le attività in sospeso e le priorità di domani.</p>
+  <div class="row"><button class="primary" data-act="pushon">Attiva promemoria</button></div></section>`;
 }
 
 // ---------- Agenda ----------
@@ -209,6 +253,7 @@ function viewOggi() {
     <span class="streak">${streak(k)}</span></button></li>`).join('')}</ul></section>
   <section class="card"><h2>3 priorità</h2>${[0, 1, 2].map(i => `<div class="pri${topd[i] ? ' on' : ''}"><button class="chk${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-label="Priorità ${i + 1} fatta" aria-pressed="${!!topd[i]}"></button>
     <input id="pri${i}" data-act="top" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1}"></div>`).join('')}</section>
+  ${pushCard()}
   ${d.getHours() >= 19 ? tomorrowCard(addD(d, 1)) : ''}
   ${lateCard(ds)}
   <section class="card"><h2>Agenda di oggi</h2>${agenda(d)}</section>
@@ -308,7 +353,12 @@ function sheetView() {
   return `<div class="ov" data-act="close">${body}</div>`;
 }
 
-function footer() { return `<div class="foot"><button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div>`; }
+function footer() {
+  const msg = pushState === 'denied' ? 'Notifiche bloccate: riattivale in Impostazioni → Notifiche → Agenda.'
+    : pushState === 'unsupported' ? 'Per i promemoria apri l’agenda dall’icona sulla schermata Home dell’iPhone.' : '';
+  return `<div class="foot">${pushState === 'on' ? '<button class="ghost" data-act="pushtest">Invia notifica di prova</button>' : ''}<button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div>
+  ${msg ? `<p class="hint center">${msg}</p>` : ''}`;
+}
 
 function viewLogin() {
   const notSet = !C.supabaseUrl || C.supabaseUrl.startsWith('INCOLLA');
@@ -346,6 +396,8 @@ app.addEventListener('click', async e => {
   else if (a === 'del' && S.tasks[id]) { lastDel = ['tasks', id, S.tasks[id]]; put('tasks', id, null); flash('Attività eliminata', true); }
   else if (a === 'edit' && S.tasks[id]) { sheet = { kind: 'task', id }; render(true); }
   else if (a === 'close') { if (b.classList.contains('ov') && e.target !== b) return; sheet = null; render(true); }
+  else if (a === 'pushon') pushOn();
+  else if (a === 'pushtest') pushTest();
   else if (a === 'fx') { sheet = { kind: 'fx', ds: b.dataset.d, k: b.dataset.k }; render(true); }
   else if (a === 'fxskip' && sheet?.kind === 'fx') { setFx(sheet.ds, sheet.k, { skip: true }); flash('Saltato solo per questo giorno'); }
   else if (a === 'fxreset' && sheet?.kind === 'fx') { setFx(sheet.ds, sheet.k, null); flash('Ripristinato'); }

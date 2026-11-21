@@ -8,6 +8,9 @@ window.AGENDA_CONFIG = {
   supabaseUrl: "https://mpzyrywlzsacjnnlhxed.supabase.co",
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wenlyeXdsenNhY2pubmxoeGVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxODA2MjAsImV4cCI6MjExMDc1NjYyMH0.aVOkHXrcb0DMSEQ30djPHNi2tmrKDamjdhlCZMAXytA",
 
+  // Chiave PUBBLICA VAPID per le notifiche push (la privata sta solo nei segreti di Supabase).
+  vapidPublicKey: "BCVC2YpGYYc9tWnt7jNQ5hNTSA0Mez_7SkEFkDVx6cVvQUPicR9aSnTSbqL9IQBSnkMM6cRD6NMZiGGwJCHiYCg",
+
   // Abitudini: la chiave (k) non va cambiata dopo che hai iniziato a usarle,
   // altrimenti lo storico di quella abitudine non viene più mostrato.
   habits: [

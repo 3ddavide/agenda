@@ -1,0 +1,13 @@
+{
+  "name": "La mia agenda",
+  "short_name": "Agenda",
+  "lang": "it",
+  "start_url": "./#oggi",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2347d6",
+  "icons": [
+    { "src": "icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
