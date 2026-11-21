@@ -32,6 +32,8 @@ let pushState = 'unknown';   // promemoria: unknown | unsupported | denied | off
 const app = document.getElementById('app'), note = document.getElementById('note');
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
+// Versione mostrata in fondo alla pagina: aggiornala insieme ai "?v=" in index.html a ogni pubblicazione.
+const VERSION = '2026-11-21.2';
 const chain = {};
 
 function flash(msg, undo) { tmsg.textContent = msg; tundo.hidden = !undo; toast.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => toast.classList.remove('show'), undo ? 5000 : 1800); }
@@ -73,7 +75,6 @@ async function loadAll() {
   note.textContent = '';
   cacheSave();
   render();
-  if (pushState === 'unknown') pushInit();
 }
 
 // ---------- Promemoria (notifiche push) ----------
@@ -86,6 +87,8 @@ async function saveSub(sub) {
   if (r.error) throw r.error;
 }
 async function pushInit() {
+  if (pushInit.started) return;
+  pushInit.started = true;
   if (!pushOk()) { pushState = 'unsupported'; render(); return; }
   try {
     const reg = await navigator.serviceWorker.register('sw.js');
@@ -112,10 +115,15 @@ async function pushTest() {
   if (error) { console.error(error); flash('Prova non riuscita: controlla la Edge Function'); return; }
   flash(data && data.sent ? 'Inviata: arriva tra pochi secondi' : 'Nessun dispositivo iscritto');
 }
+// Riquadro visibile finché i promemoria non sono attivi (con la spiegazione se non si può).
 function pushCard() {
-  if (pushState !== 'off') return '';
+  if (pushState === 'on' || pushState === 'unknown') return '';
+  const inSafari = /iPhone|iPad/.test(navigator.userAgent) && navigator.standalone === false;
+  const why = pushState === 'denied' ? 'Le notifiche sono bloccate: riattivale in Impostazioni → Notifiche → Agenda, poi riapri l’app.'
+    : pushState === 'unsupported' ? (inSafari ? 'Sei in Safari: apri l’agenda dall’icona sulla schermata Home per attivarli.'
+      : 'Qui le notifiche non sono disponibili. Su iPhone servono iOS 16.4 o successivo e l’agenda aperta dall’icona sulla schermata Home.') : '';
   return `<section class="card"><h2>Promemoria serale</h2><p class="sub">Ogni sera alle 21:30 una notifica con le attività in sospeso e le priorità di domani.</p>
-  <div class="row"><button class="primary" data-act="pushon">Attiva promemoria</button></div></section>`;
+  ${why ? `<p class="hint">${why}</p>` : '<div class="row"><button class="primary" data-act="pushon">Attiva promemoria</button></div>'}</section>`;
 }
 
 // ---------- Agenda ----------
@@ -354,10 +362,8 @@ function sheetView() {
 }
 
 function footer() {
-  const msg = pushState === 'denied' ? 'Notifiche bloccate: riattivale in Impostazioni → Notifiche → Agenda.'
-    : pushState === 'unsupported' ? 'Per i promemoria apri l’agenda dall’icona sulla schermata Home dell’iPhone.' : '';
   return `<div class="foot">${pushState === 'on' ? '<button class="ghost" data-act="pushtest">Invia notifica di prova</button>' : ''}<button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div>
-  ${msg ? `<p class="hint center">${msg}</p>` : ''}`;
+  <p class="hint center">Versione ${VERSION}</p>`;
 }
 
 function viewLogin() {
@@ -430,7 +436,7 @@ app.addEventListener('submit', async e => {
     const r = signup ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
     if (r.error) { err.textContent = r.error.message; return; }
     if (!r.data.session) { err.textContent = 'Account creato: conferma dal link nell’email, poi accedi.'; signup = false; return; }
-    user = r.data.session.user; render(true); loadAll(); return;
+    user = r.data.session.user; render(true); loadAll(); pushInit(); return;
   }
   if (f.dataset.form === 'fxtime') { const t = String(fd.get('t') || ''); if (t) { setFx(f.dataset.d, f.dataset.k, { t }); flash('Orario cambiato solo per questo giorno'); } return; }
   const title = String(fd.get('title') || '').trim(); if (!title) return;
@@ -459,7 +465,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && us
   sb = window.supabase.createClient(C.supabaseUrl, C.supabaseAnonKey);
   const { data } = await sb.auth.getSession();
   user = data.session?.user || null;
-  if (user) { cacheLoad(); render(true); loadAll(); } else render(true);
-  sb.auth.onAuthStateChange((_ev, session) => { const u = session?.user || null; if (!!u !== !!user) { user = u; render(true); if (u) loadAll(); } });
+  if (user) { cacheLoad(); render(true); loadAll(); pushInit(); } else render(true);
+  sb.auth.onAuthStateChange((_ev, session) => { const u = session?.user || null; if (!!u !== !!user) { user = u; render(true); if (u) { loadAll(); pushInit(); } } });
 })();
 }

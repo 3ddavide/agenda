@@ -69,6 +69,9 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
 - Prima di modifiche alla struttura del database, scrivi la migrazione SQL in
   `supabase/` e spiega all'utente dove incollarla.
 - Dopo una modifica, ricorda all'utente di fare commit e push per aggiornare il sito.
+- A ogni pubblicazione che cambia `app.js` o `config.js`, aumenta la versione in **tre punti
+  uguali**: `VERSION` in `app.js` e i due `?v=` in `index.html`. Senza, l'iPhone può continuare
+  a usare i file vecchi (la versione è mostrata in fondo alla pagina per controllarla).
 - Lo stile è volutamente semplice: una colonna, tre schede, pochi colori
   (blu `--acc` dominante, colori delle aree solo nei pallini).
 
