@@ -228,10 +228,14 @@ const taskName = (id, title) => `<button class="nm lk" data-act="edit" data-id="
 function agenda(d) {
   const it = dayPlan(d);
   if (!it.length) return '<p class="empty">Niente in programma.</p>';
-  return '<ul class="ag">' + it.map(x => `<li class="${x.done ? 'done' : ''}${x.skip ? ' skip' : ''}">
+  // Passati (giorni prima di oggi, o già finiti oggi): barrati come nel widget.
+  const ds = iso(d), now = new Date(), today = iso(now), nowMin = now.getHours() * 60 + now.getMinutes();
+  const isPast = x => ds < today || (ds === today && !!x.t && (x.re != null ? x.re : toMin(x.t)) <= nowMin);
+  const sub = x => x.why || (x.id ? AREE[x.a] || '' : x.fx ? 'impegno fisso' : '');
+  return '<ul class="ag">' + it.map(x => `<li class="${x.done ? 'done' : ''}${x.skip ? ' skip' : ''}${isPast(x) ? ' past' : ''}">
     <span class="tm">${x.t ? esc(x.t) + (x.e ? '<small>' + esc(x.e) + '</small>' : '') : '—'}</span>
     <span class="dot ${esc(x.a)}"></span>
-    <span class="tt${x.fx ? ' fx' : ''}">${x.dl ? '<span class="dl">Scadenza · </span>' : ''}${x.id ? taskName(x.id, x.n) : `<span class="nm">${esc(x.n)}</span>`}${x.why ? '<small class="why">' + esc(x.why) + '</small>' : ''}</span>
+    <span class="tt${x.fx ? ' fx' : ''}">${x.dl ? '<span class="dl">Scadenza · </span>' : ''}${x.id ? taskName(x.id, x.n) : `<span class="nm">${esc(x.n)}</span>`}${sub(x) ? '<small class="why">' + esc(sub(x)) + '</small>' : ''}</span>
     ${x.id ? `<span class="acts"><button class="mini${x.done ? ' on' : ''}" data-act="done" data-id="${x.id}" aria-label="Segna come fatto">✓</button><button class="mini" data-act="del" data-id="${x.id}" aria-label="Elimina">×</button></span>`
       : x.k ? `<span class="acts"><button class="mini${x.ov ? ' ovr' : ''}" data-act="fx" data-d="${iso(d)}" data-k="${esc(x.k)}" aria-label="Opzioni per ${esc(x.n)}">⋯</button></span>` : '<span></span>'}
   </li>`).join('') + '</ul>';
@@ -376,19 +380,21 @@ function panelBody(p) {
     return ['Abitudini', `<ul class="habits">${HAB.map(([k, l]) => `<li><button class="hab${h[k] ? ' on' : ''}" data-act="hab" data-d="${ds}" data-k="${esc(k)}" aria-pressed="${!!h[k]}">
       <span class="tick"></span><span class="hl">${esc(l)}${k === 'allen' ? `<small>${trHab}</small>` : ''}</span><span class="streak">${streak(k)}</span></button></li>`).join('')}</ul>`];
   }
-  if (p === 'agenda') return ['Agenda di oggi', agenda(d)];
+  // Toglie il titolo interno dei vecchi riquadri (il titolo ora è nell'intestazione del pannello).
+  const noHead = h => h.replace(/<h2>[^<]*<\/h2>/, '').replace(/^(<section class="card">)?\s*<p class="sub">[^<]*<\/p>/, '$1');
+  if (p === 'agenda') return ['Agenda', `${agenda(d)}<button class="addrow" data-act="addon" data-d="${ds}">+ Aggiungi a oggi</button>`];
   if (p === 'prio') {
     const top = day.top || ['', '', ''], topd = day.topd || [false, false, false];
     const ph = ['La cosa più importante di oggi', 'Seconda priorità', 'Terza priorità'];
     return ['3 priorità', [0, 1, 2].map(i => `<div class="pri${topd[i] ? ' on' : ''}"><button class="chk${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-label="Priorità ${i + 1} fatta" aria-pressed="${!!topd[i]}"></button>
       <input id="pri${i}" data-act="top" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1}"></div>`).join('')];
   }
-  if (p === 'late') return ['In sospeso', lateCard(ds) || '<p class="empty">Niente in sospeso: sei in pari.</p>'];
-  if (p === 'tomorrow') return ['Prepara domani', tomorrowCard(addD(d, 1))];
+  if (p === 'late') return ['In sospeso', noHead(lateCard(ds)) || '<p class="empty">Niente in sospeso: sei in pari.</p>'];
+  if (p === 'tomorrow') return ['Prepara domani', noHead(tomorrowCard(addD(d, 1))).replace(/<h2>[^<]*<\/h2>\s*<p class="sub">[^<]*<\/p>/, '')];
   if (p === 'add') {
     const v = cur(), m = addD(monday(d), weekOff * 7);
     const def = sheet && sheet.d ? sheet.d : v === 'mese' && selDay ? selDay : v === 'settimana' && weekOff ? iso(m) : ds;
-    return ['Aggiungi attività', addForm(def)];
+    return ['Aggiungi attività', noHead(addForm(def))];
   }
   // --- Settimana ---
   if (p === 'whab') {
@@ -433,7 +439,7 @@ function panelBody(p) {
   // --- Mese ---
   if (p === 'day') {
     const sd = parse(selDay || iso(new Date()));
-    return [`${GG[sd.getDay()]} ${sd.getDate()} ${MM[sd.getMonth()]}`, `${agenda(sd)}<div class="row"><button class="ghost" data-act="addon" data-d="${iso(sd)}">+ Aggiungi a questo giorno</button></div>`];
+    return [`${GG[sd.getDay()]} ${sd.getDate()} ${MM[sd.getMonth()]}`, `${agenda(sd)}<button class="addrow" data-act="addon" data-d="${iso(sd)}">+ Aggiungi a questo giorno</button>`];
   }
   if (p === 'deadlines') {
     const { first, mk } = monthInfo(), today = iso(new Date());
@@ -629,18 +635,59 @@ function viewMese() {
     + widget('a-fx', 'fixed', 'pin', 'Impegni fissi', '', fx);
 }
 
-// Modulo che si apre sopra la pagina (modifica attività, opzioni impegni fissi).
+// Icona e riga di riepilogo di ogni pannello.
+const PANEL_ICON = { habits: 'habit', agenda: 'clock', prio: 'list', late: 'hourglass', tomorrow: 'moon', add: 'plus', menu: 'more',
+  whab: 'habit', wdays: 'cal', wtrain: 'dumbbell', someday: 'inbox', review: 'repeat', day: 'cal', deadlines: 'flag', goals: 'target', stats: 'bars', fixed: 'pin' };
+const longDate = d => `${GG[d.getDay()]} ${d.getDate()} ${MM[d.getMonth()]}`;
+const impegni = n => n === 1 ? '1 impegno' : `${n} impegni`;
+function panelSub(p) {
+  const d = new Date(), ds = iso(d), days = weekDays(), { first, mk } = monthInfo();
+  switch (p) {
+    case 'habits': return `${countDay(ds)} di ${HAB.length} oggi`;
+    case 'agenda': return `${longDate(d)} · ${impegni(dayPlan(d).length)}`;
+    case 'prio': return longDate(d);
+    case 'late': { const n = Object.values(S.tasks).filter(t => t.date && t.date < ds && !t.done).length; return n ? `${n} da recuperare` : 'Tutto in pari'; }
+    case 'tomorrow': return longDate(addD(d, 1));
+    case 'whab': { const pc = pctOf(days); return `${weekRange(days[0])}${pc === null ? '' : ' · ' + pc + '%'}`; }
+    case 'wdays': return weekRange(days[0]);
+    case 'wtrain': { const tr = trainingsOf(days); return `${tr.filter(x => x.done).length} fatti su ${tr.length}`; }
+    case 'someday': { const n = Object.values(S.tasks).filter(t => !t.date && !t.done).length; return n === 1 ? '1 da fare' : `${n} da fare`; }
+    case 'review': return 'Domenica, 15 minuti';
+    case 'day': { const sd = parse(selDay || ds); return impegni(dayPlan(sd).length); }
+    case 'deadlines': case 'stats': return cap(MM[first.getMonth()]) + ' ' + first.getFullYear();
+    case 'goals': { const g = Object.values(S.goals).filter(x => x.month === mk); return g.length ? `${g.filter(x => x.done).length} di ${g.length} raggiunti` : cap(MM[first.getMonth()]); }
+    case 'fixed': return 'Da config.js';
+    case 'menu': return 'Versione ' + VERSION;
+    default: return '';
+  }
+}
+let sheetAnim = false;   // true solo all'apertura: l'animazione non si ripete a ogni aggiornamento
+function openSheet(s) { sheet = s; sheetAnim = true; render(true); }
+// Chiude il pannello con l'animazione di discesa (subito se "Riduci movimento" è attivo).
+function closeSheet() {
+  const ov = app.querySelector('.ov'), sh = ov && ov.querySelector('.sheet');
+  if (!sh || matchMedia('(prefers-reduced-motion: reduce)').matches) { sheet = null; render(true); return; }
+  ov.classList.add('leaving'); sh.style.transition = 'transform .22s ease-in'; sh.style.transform = 'translateY(105%)';
+  setTimeout(() => { if (ov.isConnected) { sheet = null; render(true); } }, 220);
+}
+// Il pannello si apre sotto il selettore dei livelli, che resta visibile.
+function sheetTop() { const s = document.querySelector('.seg'); return s ? Math.round(s.getBoundingClientRect().bottom + 8) : 0; }
+const sheetHead = (icon, title, sub) => `<div class="grab" aria-hidden="true"></div><div class="shh">${icon ? `<span class="ic">${svg(icon)}</span>` : ''}<div class="tx"><h2>${esc(title)}</h2>${sub ? `<p>${esc(sub)}</p>` : ''}</div>
+  <button class="rbtn glass x" data-act="close" aria-label="Chiudi">${svg('x')}</button></div>`;
+
+// Pannello che si apre dal basso (widget, +, ⋯, modifica attività, opzioni impegni fissi).
 function sheetView() {
   if (!sheet) return '';
-  let body = '';
+  let body = '', label = '';
   if (sheet.kind === 'panel') {
     const [title, html] = panelBody(sheet.p);
-    body = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="wh" style="font-size:18px"><span>${esc(title)}</span>
-      <button class="rbtn glass" style="margin-left:auto;width:40px;height:40px" data-act="close" aria-label="Chiudi">${svg('x')}</button></div>${html}</div>`;
+    label = title;
+    body = sheetHead(PANEL_ICON[sheet.p], title, panelSub(sheet.p)) + html;
   }
   if (sheet.kind === 'task') {
     const t = S.tasks[sheet.id]; if (!t) { sheet = null; return ''; }
-    body = `<form class="card sheet" data-form="edit" data-id="${sheet.id}"><h2>Modifica attività</h2>
+    label = 'Modifica attività';
+    body = sheetHead('list', 'Modifica attività', t.date ? longDate(parse(t.date)) : 'Prima o poi') + `<form data-form="edit" data-id="${sheet.id}">
     <input name="title" value="${esc(t.title)}" required aria-label="Attività">
     <div class="row"><input type="date" name="date" value="${esc(t.date || '')}" aria-label="Giorno (vuoto = Prima o poi)"><select name="area" aria-label="Area">${areaOpts(t.area || 'pers')}</select></div>
     <div class="row"><label class="tl">Dalle<input type="time" name="time" value="${esc(t.time || '')}" aria-label="Ora di inizio"></label><label class="tl">alle<input type="time" name="end" value="${esc(t.end || '')}" aria-label="Ora di fine"></label></div>
@@ -651,14 +698,15 @@ function sheetView() {
   if (sheet.kind === 'fx') {
     const d = parse(sheet.ds), x = fixed(d).find(f => f.k === sheet.k); if (!x) { sheet = null; return ''; }
     const when = sheet.ds === iso(new Date()) ? 'oggi' : GG[d.getDay()].toLowerCase() + ' ' + d.getDate();
-    body = `<form class="card sheet" data-form="fxtime" data-d="${sheet.ds}" data-k="${esc(sheet.k)}"><h2>${esc(x.n)}</h2>
-    <p class="sub">${GG[d.getDay()]} ${d.getDate()} ${MM[d.getMonth()]} · di solito alle ${esc(x.t0)}</p>
+    label = x.n;
+    body = sheetHead(x.train ? 'dumbbell' : 'pin', x.n, `${longDate(d)} · di solito alle ${x.t0}`) + `<form data-form="fxtime" data-d="${sheet.ds}" data-k="${esc(sheet.k)}">
     <div class="row"><button type="button" class="ghost" data-act="fxskip">Salta solo ${when}</button></div>
     <div class="row"><label class="tl">Nuovo orario<input type="time" name="t" value="${esc(x.skip ? x.t0 : x.t)}" required></label><button class="primary">Sposta solo ${when}</button></div>
     ${x.ov ? '<div class="row"><button type="button" class="ghost" data-act="fxreset">Ripristina come al solito</button></div>' : ''}
     <div class="row end"><button type="button" class="ghost" data-act="close">Annulla</button></div></form>`;
   }
-  return `<div class="ov" data-act="close">${body}</div>`;
+  const anim = sheetAnim ? ' anim' : '';
+  return `<div class="ov${anim}" data-act="close" style="top:${sheetTop()}px"><div class="sheet${anim}" role="dialog" aria-modal="true" aria-label="${esc(label)}">${body}</div></div>`;
 }
 
 function footer() {
@@ -687,6 +735,7 @@ function render(force) {
   if (!user) { app.innerHTML = viewLogin(); return; }
   const v = cur();
   app.innerHTML = `<div class="shell">${shellHead(v)}<section class="board ${NEW_LAYOUT[v] ? v : 'legacy'}">${VIEWS[v]()}</section></div>` + sheetView();
+  sheetAnim = false;
 }
 
 // ---------- Eventi ----------
@@ -695,10 +744,10 @@ app.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b || b.tagName === 'INPUT') return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === 'hab') { const ds = b.dataset.d, h = { ...(S.days[ds]?.h || {}) }; h[b.dataset.k] = !h[b.dataset.k]; popKey = h[b.dataset.k] ? ds + b.dataset.k : ''; setDay(ds, { h }); popKey = ''; }
-  else if (a === 'open') { sheet = { kind: 'panel', p: b.dataset.p }; render(true); }
-  else if (a === 'add' || a === 'menu') { sheet = { kind: 'panel', p: a }; render(true); }
-  else if (a === 'day') { selDay = b.dataset.d; sheet = { kind: 'panel', p: 'day' }; render(true); }
-  else if (a === 'addon') { selDay = b.dataset.d; sheet = { kind: 'panel', p: 'add', d: b.dataset.d }; render(true); }
+  else if (a === 'open') openSheet({ kind: 'panel', p: b.dataset.p });
+  else if (a === 'add' || a === 'menu') openSheet({ kind: 'panel', p: a });
+  else if (a === 'day') { selDay = b.dataset.d; openSheet({ kind: 'panel', p: 'day' }); }
+  else if (a === 'addon') { selDay = b.dataset.d; openSheet({ kind: 'panel', p: 'add', d: b.dataset.d }); }
   else if (a === 'rvchk') reviewToggle(+b.dataset.i);
   else if (a === 'theme') setTheme(b.dataset.v);
   else if (a === 'wk0') { weekOff = 0; render(true); }
@@ -706,11 +755,11 @@ app.addEventListener('click', async e => {
   else if (a === 'topd') { const ds = iso(new Date()), td = [...(S.days[ds]?.topd || [false, false, false])]; td[+b.dataset.i] = !td[+b.dataset.i]; setDay(ds, { topd: td }); }
   else if (a === 'done' && S.tasks[id]) put('tasks', id, { ...S.tasks[id], done: !S.tasks[id].done });
   else if (a === 'del' && S.tasks[id]) { lastDel = ['tasks', id, S.tasks[id]]; put('tasks', id, null); flash('Attività eliminata', true); }
-  else if (a === 'edit' && S.tasks[id]) { sheet = { kind: 'task', id }; render(true); }
-  else if (a === 'close') { if (b.classList.contains('ov') && e.target !== b) return; sheet = null; render(true); }
+  else if (a === 'edit' && S.tasks[id]) openSheet({ kind: 'task', id });
+  else if (a === 'close') { if (b.classList.contains('ov') && e.target !== b) return; closeSheet(); }
   else if (a === 'pushon') pushOn();
   else if (a === 'pushtest') pushTest();
-  else if (a === 'fx') { sheet = { kind: 'fx', ds: b.dataset.d, k: b.dataset.k }; render(true); }
+  else if (a === 'fx') openSheet({ kind: 'fx', ds: b.dataset.d, k: b.dataset.k });
   else if (a === 'fxskip' && sheet?.kind === 'fx') { setFx(sheet.ds, sheet.k, { skip: true }); flash('Saltato solo per questo giorno'); }
   else if (a === 'fxreset' && sheet?.kind === 'fx') { setFx(sheet.ds, sheet.k, null); flash('Ripristinato'); }
   else if (a === 'mv' && S.tasks[id]) { const to = +b.dataset.v; put('tasks', id, { ...S.tasks[id], date: iso(addD(new Date(), to)) }); flash(to ? 'Spostata a domani' : 'Spostata a oggi'); }
@@ -736,8 +785,28 @@ app.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.dataset.act === 'top') e.target.blur();
   // Widget da tastiera: Invio o spazio lo aprono.
   if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset.act === 'open' && e.target.tagName === 'DIV') { e.preventDefault(); e.target.click(); }
-  if (e.key === 'Escape' && sheet) { sheet = null; render(true); }
+  if (e.key === 'Escape' && sheet) closeSheet();
 });
+// Trascinare il pannello in giù (dalla maniglia o dall'intestazione) lo chiude.
+let drag = null;
+app.addEventListener('pointerdown', e => {
+  const h = e.target.closest('.grab, .shh'); if (!h || e.target.closest('button')) return;
+  const sh = h.closest('.sheet'); if (!sh) return;
+  drag = { sh, y: e.clientY, dy: 0, t: Date.now() }; sh.style.transition = 'none';
+  try { h.setPointerCapture(e.pointerId); } catch (x) {}
+});
+app.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.dy = Math.max(0, e.clientY - drag.y); drag.sh.style.transform = `translateY(${drag.dy}px)`;
+});
+function endDrag() {
+  if (!drag) return;
+  const { sh, dy, t } = drag; drag = null;
+  if (dy > 110 || (dy > 30 && dy / Math.max(1, Date.now() - t) > 0.6)) closeSheet();
+  else { sh.style.transition = 'transform .2s ease-out'; sh.style.transform = ''; }
+}
+app.addEventListener('pointerup', endDrag);
+app.addEventListener('pointercancel', endDrag);
 app.addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target, fd = new FormData(f);
@@ -767,7 +836,7 @@ app.addEventListener('submit', async e => {
   flash('Aggiunto');
 });
 tundo.addEventListener('click', () => { if (lastDel) { put(lastDel[0], lastDel[1], lastDel[2]); lastDel = null; toast.classList.remove('show'); } });
-window.addEventListener('hashchange', () => render(true));
+window.addEventListener('hashchange', () => { sheet = null; render(true); });   // cambiare livello chiude il pannello
 document.addEventListener('visibilitychange', () => { if (!document.hidden && user) loadAll(); });
 
 // ---------- Avvio ----------

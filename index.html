@@ -27,7 +27,7 @@
   --shadow:0 10px 30px -12px rgba(30,30,45,.22),0 2px 6px -2px rgba(30,30,45,.08);
   --ink:#121216;--mut:#6c6c74;--faint:#a6a6ae;--line:rgba(20,20,30,.08);
   --solid:#121216;--onsolid:#ffffff;--empty:rgba(20,20,30,.22);
-  --scrim:rgba(235,235,240,.35);
+  --scrim:rgba(235,235,240,.35);--sheet:rgba(250,250,252,.86);
   /* le aree restano solo come etichette: tutto in scala di grigi */
   --uni:#55555c;--sport:#7a7a82;--lavoro:#3a3a40;--pers:#a0a0a8;--eventi:#2a2a30;--red:#121216;
 }
@@ -39,7 +39,7 @@
   --shadow:0 12px 34px -14px rgba(0,0,0,.7),0 2px 6px -2px rgba(0,0,0,.4);
   --ink:#f2f2f5;--mut:#9d9da6;--faint:#64646c;--line:rgba(255,255,255,.08);
   --solid:#f2f2f5;--onsolid:#121216;--empty:rgba(255,255,255,.25);
-  --scrim:rgba(10,10,12,.35);
+  --scrim:rgba(10,10,12,.35);--sheet:rgba(30,30,36,.88);
   --uni:#b8b8c0;--sport:#8e8e96;--lavoro:#d6d6dc;--pers:#6e6e76;--eventi:#eeeef2;--red:#f2f2f5;
 }}
 :root[data-theme=dark]{
@@ -50,7 +50,7 @@
   --shadow:0 12px 34px -14px rgba(0,0,0,.7),0 2px 6px -2px rgba(0,0,0,.4);
   --ink:#f2f2f5;--mut:#9d9da6;--faint:#64646c;--line:rgba(255,255,255,.08);
   --solid:#f2f2f5;--onsolid:#121216;--empty:rgba(255,255,255,.25);
-  --scrim:rgba(10,10,12,.35);
+  --scrim:rgba(10,10,12,.35);--sheet:rgba(30,30,36,.88);
   --uni:#b8b8c0;--sport:#8e8e96;--lavoro:#d6d6dc;--pers:#6e6e76;--eventi:#eeeef2;--red:#f2f2f5;
 }
 *{box-sizing:border-box;min-width:0}
@@ -298,11 +298,37 @@ input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--glass
 .ghost{background:var(--glass-hi);border:1px solid var(--line);border-radius:14px;padding:0 16px;min-height:44px;color:var(--ink);font-weight:600;cursor:pointer}
 .foot{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
 
-/* Pannello dal basso (verrà rifinito alla tappa 2) */
-.ov{position:fixed;inset:0;z-index:8;background:var(--scrim);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center}
-.sheet{width:100%;max-width:520px;max-height:calc(100dvh - env(safe-area-inset-top) - 150px);overflow:auto;margin:0;border-radius:28px 28px 0 0;
-  padding:18px 18px calc(env(safe-area-inset-bottom) + 18px);background:var(--glass-hi);-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%);border:1px solid var(--stroke);box-shadow:0 -10px 40px -12px rgba(0,0,0,.3)}
+/* ---------- Pannello dal basso ----------
+   Si ferma sotto il selettore dei livelli (top calcolato in app.js), che resta visibile. */
+.ov{position:fixed;left:0;right:0;bottom:0;top:0;z-index:8;display:flex;align-items:flex-end;justify-content:center;
+  background:var(--scrim);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:26px 26px 0 0}
+.sheet{position:relative;width:100%;max-width:480px;max-height:100%;overflow:auto;overscroll-behavior:contain;margin:0;border-radius:30px 30px 0 0;
+  padding:8px 18px calc(env(safe-area-inset-bottom) + 18px);background:var(--sheet);-webkit-backdrop-filter:blur(34px) saturate(180%);backdrop-filter:blur(34px) saturate(180%);
+  border:1px solid var(--stroke);border-bottom:0;box-shadow:0 -14px 40px -14px rgba(0,0,0,.28),inset 0 1px 0 var(--gloss);will-change:transform}
+.grab{position:relative;width:96px;height:22px;margin:-4px auto 0;touch-action:none;cursor:grab}
+.grab::after{content:"";position:absolute;left:28px;right:28px;top:8px;height:5px;border-radius:3px;background:var(--empty)}
+.shh{display:flex;align-items:center;gap:12px;padding:8px 0 12px;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.shh .ic{width:40px;height:40px;border-radius:12px}.shh .ic svg{width:21px;height:21px}
+.shh .tx{flex:1}
+.shh h2{margin:0;font-size:22px;line-height:1.15;font-weight:800;letter-spacing:-.02em}
+.shh p{margin:2px 0 0;color:var(--mut);font-size:13px}
+.shh .x{width:40px;height:40px;flex:none}.shh .x svg{width:18px;height:18px}
 .sheet .card{background:none;border:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;padding:0;margin:0 0 14px}
+.sheet h2{font-size:15px}
+/* Agenda nei pannelli: orari grandi, niente pallini colorati, passati barrati */
+.sheet .ag li{grid-template-columns:3.4em minmax(0,1fr) auto;padding:12px 0}
+.sheet .ag .dot{display:none}
+.sheet .ag .tm{font-size:17px}
+.sheet .ag .tt{font-size:16px;font-weight:500}
+.ag li.past .tm,.ag li.past .nm{color:var(--faint);text-decoration:line-through}
+.ag li.past .why{color:var(--faint)}
+.addrow{display:block;width:100%;min-height:50px;margin:14px 0 2px;border:0;border-radius:16px;background:var(--line);color:var(--ink);font-weight:700;font-size:15px;cursor:pointer}
+/* Animazioni (spente con "Riduci movimento", vedi in fondo) */
+.ov.anim{animation:ovIn .25s ease-out}
+.sheet.anim{animation:shIn .34s cubic-bezier(.2,.9,.3,1)}
+.ov.leaving{opacity:0;transition:opacity .22s ease-in}
+@keyframes ovIn{from{opacity:0}}
+@keyframes shIn{from{transform:translateY(100%)}}
 
 /* ---------- Avviso in basso e accesso ---------- */
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 20px);transform:translateX(-50%);background:var(--solid);color:var(--onsolid);padding:10px 16px;border-radius:16px;display:flex;gap:14px;align-items:center;opacity:0;pointer-events:none;transition:opacity .2s;z-index:9;white-space:nowrap;max-width:calc(100vw - 32px);font-weight:600;font-size:14px}
