@@ -294,6 +294,20 @@ const widget = (cls, p, icon, title, right, body) =>
 const badge = n => n ? `<span class="badge" aria-label="${n} da recuperare">${n}</span>` : '';
 let popKey = '';   // abitudine appena spuntata (per la piccola animazione)
 
+// Tema: automatico (segue l'iPhone), chiaro o scuro. Ricordato solo su questo telefono.
+const THEME_KEY = 'agenda-tema';
+let themeMem = 'auto';
+function getTheme() { try { return localStorage.getItem(THEME_KEY) || themeMem; } catch (e) { return themeMem; } }
+function applyTheme(t) {
+  const r = document.documentElement;
+  if (t === 'light' || t === 'dark') r.dataset.theme = t; else delete r.dataset.theme;
+  const dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.setAttribute('content', dark ? '#0e0e11' : '#e9e9ee');
+}
+function setTheme(t) { themeMem = t; try { localStorage.setItem(THEME_KEY, t); } catch (e) {} applyTheme(t); render(true); }
+applyTheme(getTheme());
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme(getTheme()));
+
 // Intestazione (data piccola + titolo grande, pulsanti + e ⋯) e selettore dei tre livelli.
 function shellHead(v) {
   const now = new Date(), wm = addD(monday(now), weekOff * 7), mf = new Date(now.getFullYear(), now.getMonth() + monthOff, 1);
@@ -443,7 +457,11 @@ function panelBody(p) {
   }
   if (p === 'menu') {
     const pr = pushState === 'on' ? '<section class="card"><h2>Promemoria serale</h2><p class="sub">Attivi: ogni sera alle 21:30.</p><div class="row"><button class="ghost" data-act="pushtest">Invia notifica di prova</button></div></section>' : pushCard();
-    return ['Impostazioni', `${pr}<div class="foot"><button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div><p class="hint center">Versione ${VERSION}</p>`];
+    const th = getTheme();
+    const tema = `<section class="card"><h2>Tema</h2><div class="tseg" role="group" aria-label="Tema">${[['auto', 'Automatico'], ['light', 'Chiaro'], ['dark', 'Scuro']].map(([k, l]) =>
+      `<button data-act="theme" data-v="${k}" aria-pressed="${th === k}">${l}</button>`).join('')}</div>
+      <p class="hint">Automatico segue la modalità chiara o scura dell'iPhone.</p></section>`;
+    return ['Impostazioni', `${tema}${pr}<div class="foot"><button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div><p class="hint center">Versione ${VERSION}</p>`];
   }
   return ['', ''];
 }
@@ -682,6 +700,7 @@ app.addEventListener('click', async e => {
   else if (a === 'day') { selDay = b.dataset.d; sheet = { kind: 'panel', p: 'day' }; render(true); }
   else if (a === 'addon') { selDay = b.dataset.d; sheet = { kind: 'panel', p: 'add', d: b.dataset.d }; render(true); }
   else if (a === 'rvchk') reviewToggle(+b.dataset.i);
+  else if (a === 'theme') setTheme(b.dataset.v);
   else if (a === 'wk0') { weekOff = 0; render(true); }
   else if (a === 'mo0') { monthOff = 0; render(true); }
   else if (a === 'topd') { const ds = iso(new Date()), td = [...(S.days[ds]?.topd || [false, false, false])]; td[+b.dataset.i] = !td[+b.dataset.i]; setDay(ds, { topd: td }); }

@@ -193,6 +193,11 @@ svg.i{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-l
 .fl li::first-line{color:var(--ink)}
 .sl li b strong{font-weight:800}
 
+/* Impostazioni: scelta del tema */
+.tseg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:var(--line)}
+.tseg button{min-height:44px;border:0;border-radius:12px;background:none;font-weight:600;color:var(--mut);cursor:pointer}
+.tseg button[aria-pressed=true]{background:var(--glass-hi);color:var(--ink);box-shadow:0 2px 8px -3px rgba(0,0,0,.3)}
+
 /* Pannelli: review e statistiche */
 .rvl li{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
 .rvl li:last-child{border-bottom:0}
