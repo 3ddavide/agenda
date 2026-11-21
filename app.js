@@ -248,25 +248,126 @@ function addForm(ds) {
 }
 
 // ---------- Viste ----------
-function viewOggi() {
-  const d = new Date(), ds = iso(d), day = S.days[ds] || {}, h = day.h || {}, n = countDay(ds), w = d.getDay(), tr = trainOf(d);
-  const trHero = !tr ? 'giorno di riposo' : tr.skip ? 'allenamento saltato oggi' : 'allenamento: ' + esc(tr.n.toLowerCase()) + ' alle ' + esc(tr.t);
-  const trHab = !tr ? 'Oggi riposo: spunta se hai rispettato il piano' : tr.skip ? esc(tr.why) : 'In programma: ' + esc(tr.n) + ' alle ' + esc(tr.t) + (tr.why ? ' (spostato)' : '');
+// ---------- Interfaccia a widget: elementi comuni ----------
+const ICON = {
+  habit: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  hourglass: '<path d="M6 3h12M6 21h12M7 3v2.5a5 5 0 0 0 10 0V3M7 21v-2.5a5 5 0 0 1 10 0V21"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  more: '<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+};
+const svg = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+// Nome breve di un'abitudine per i cerchi: dalla chiave ("medit" → "Medit.", "sveglia" → "Sveglia").
+const shortHab = (k, l) => cap(k) + (new RegExp('\\b' + k + '\\b', 'i').test(l) ? '' : '.');
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), wd = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - wd);
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+}
+function weekRange(m) {
+  const e = addD(m, 6);
+  return m.getMonth() === e.getMonth() ? `${m.getDate()}–${e.getDate()} ${MM[e.getMonth()].slice(0, 3)}`
+    : `${m.getDate()} ${MM[m.getMonth()].slice(0, 3)} – ${e.getDate()} ${MM[e.getMonth()].slice(0, 3)}`;
+}
+function since(ds, today) {
+  const d = parse(ds), n = Math.round((parse(today) - d) / 864e5);
+  return n === 1 ? 'da ieri' : n < 7 ? 'da ' + GG[d.getDay()].toLowerCase() : 'dal ' + d.getDate() + ' ' + MM[d.getMonth()].slice(0, 3);
+}
+// Un widget: icona squadrata, titolo, dato sintetico a destra; toccandolo si apre il pannello "p".
+const widget = (cls, p, icon, title, right, body) =>
+  `<div class="w glass ${cls}" data-act="open" data-p="${p}" role="button" tabindex="0" aria-label="${esc(title)}: apri"><div class="wh"><span class="ic">${svg(icon)}</span><span>${esc(title)}</span>${right || ''}</div><div class="wb">${body}</div></div>`;
+const badge = n => n ? `<span class="badge" aria-label="${n} da recuperare">${n}</span>` : '';
+let popKey = '';   // abitudine appena spuntata (per la piccola animazione)
+
+// Intestazione (data piccola + titolo grande, pulsanti + e ⋯) e selettore dei tre livelli.
+function shellHead(v) {
+  const now = new Date(), wm = addD(monday(now), weekOff * 7), mf = new Date(now.getFullYear(), now.getMonth() + monthOff, 1);
+  const head = {
+    oggi: [`${MM[now.getMonth()]} · settimana ${isoWeek(now)}`, `${GG[now.getDay()]} ${now.getDate()}`],
+    settimana: [`settimana ${isoWeek(wm)}`, weekRange(wm)],
+    mese: [String(mf.getFullYear()), cap(MM[mf.getMonth()])],
+  }[v];
+  const seg = [['oggi', 'Giorno', `${GS[now.getDay()].toLowerCase()} ${now.getDate()}`], ['settimana', 'Settimana', weekRange(wm)], ['mese', 'Mese', MM[mf.getMonth()]]];
+  return `<header class="hd"><div class="tx"><p class="kick">${esc(head[0])}</p><h1>${esc(head[1])}</h1></div>
+    <button class="rbtn glass" data-act="menu" aria-label="Impostazioni, backup e promemoria">${svg('more')}${pushState === 'off' ? '<span class="pip"></span>' : ''}</button>
+    <button class="rbtn glass" data-act="add" aria-label="Aggiungi attività">${svg('plus')}</button></header>
+  <nav class="seg glass" aria-label="Livelli">${seg.map(([k, l, s]) => `<a href="#${k}"${k === v ? ' aria-current="page"' : ''}>${l}<small>${esc(s)}</small></a>`).join('')}</nav>`;
+}
+
+// ---------- Livello Giorno ----------
+function viewGiorno() {
+  const d = new Date(), ds = iso(d), day = S.days[ds] || {}, h = day.h || {}, n = countDay(ds);
+  // Abitudini (largo): cerchi spuntabili direttamente.
+  const habs = `<div class="habrow">${HAB.map(([k, l]) => `<button class="hc${h[k] ? ' on' : ''}${popKey === ds + k ? ' pop' : ''}" data-act="hab" data-d="${ds}" data-k="${esc(k)}" aria-pressed="${!!h[k]}" aria-label="${esc(l)}">
+    <span class="ring">${svg('check')}</span><span>${esc(shortHab(k, l))}</span></button>`).join('')}</div>`;
+  // Agenda (alto): impegni in ordine di orario, linea "adesso", passati barrati.
+  const nowMin = d.getHours() * 60 + d.getMinutes(), it = dayPlan(d), rows = [];
+  let placed = false;
+  const nowRow = { now: 1 };
+  for (const x of it.filter(x => x.t)) {
+    const s = toMin(x.t), end = x.re != null ? x.re : s;
+    if (!placed && s > nowMin) { rows.push(nowRow); placed = true; }
+    rows.push({ ...x, past: !!(x.done || x.skip || end <= nowMin) });
+  }
+  if (!placed) rows.push(nowRow);
+  for (const x of it.filter(x => !x.t)) rows.push({ ...x, past: !!(x.done || x.skip) });
+  const from = Math.max(0, rows.indexOf(nowRow) - 3);
+  const ag = `<ul class="agl">${rows.slice(from).map(x => x.now ? `<li class="now">${toHM(nowMin)}</li>`
+    : `<li class="${x.past ? 'past' : ''}"><span class="t">${x.t ? esc(x.t) : '—'}</span><span class="n">${esc(x.n)}</span></li>`).join('')}</ul>`;
+  // Priorità (piccolo): spuntabili.
   const top = day.top || ['', '', ''], topd = day.topd || [false, false, false];
-  const ph = ['La cosa più importante di oggi', 'Seconda priorità', 'Terza priorità'];
-  return `<section class="hero"><p class="kick">${GG[w]}</p><h1>${d.getDate()} ${MM[d.getMonth()]}</h1>
-  <p class="sub">${n} di ${HAB.length} abitudini · ${trHero}</p></section>
-  <section class="card"><div class="ch"><h2>Abitudini</h2><span class="meter" aria-label="${n} su ${HAB.length}"><i style="width:${Math.round(pctDay(ds) * 100)}%"></i></span></div>
-  <ul class="habits">${HAB.map(([k, l]) => `<li><button class="hab${h[k] ? ' on' : ''}" data-act="hab" data-d="${ds}" data-k="${esc(k)}" aria-pressed="${!!h[k]}">
-    <span class="tick"></span><span class="hl">${esc(l)}${k === 'allen' ? `<small>${trHab}</small>` : ''}</span>
-    <span class="streak">${streak(k)}</span></button></li>`).join('')}</ul></section>
-  <section class="card"><h2>3 priorità</h2>${[0, 1, 2].map(i => `<div class="pri${topd[i] ? ' on' : ''}"><button class="chk${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-label="Priorità ${i + 1} fatta" aria-pressed="${!!topd[i]}"></button>
-    <input id="pri${i}" data-act="top" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1}"></div>`).join('')}</section>
-  ${pushCard()}
-  ${d.getHours() >= 19 ? tomorrowCard(addD(d, 1)) : ''}
-  ${lateCard(ds)}
-  <section class="card"><h2>Agenda di oggi</h2>${agenda(d)}</section>
-  ${addForm(ds)}${footer()}`;
+  const pr = top.some(s => s && s.trim()) ? `<ul class="pl">${[0, 1, 2].filter(i => top[i] && top[i].trim()).map(i => `<li class="${topd[i] ? 'done' : ''}">
+    <button class="cbx${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-pressed="${!!topd[i]}" aria-label="Fatta: ${esc(top[i])}"></button><span class="x">${esc(top[i])}</span></li>`).join('')}</ul>`
+    : '<p class="small mutd" style="margin:0">Scrivi le 3 cose più importanti di oggi.</p>';
+  // In sospeso (piccolo): prime 2 attività arretrate.
+  const late = Object.entries(S.tasks).filter(([, t]) => t.date && t.date < ds && !t.done).sort((a, b) => b[1].date.localeCompare(a[1].date));
+  const so = late.length ? `<ul class="sl">${late.slice(0, 2).map(([, t]) => `<li><b>${esc(t.title)}</b><small>${since(t.date, ds)}</small></li>`).join('')}</ul>`
+    : '<p class="small mutd" style="margin:0">Niente in sospeso.</p>';
+  // Prepara domani (largo, basso): in evidenza dalle 19:00.
+  const t = addD(d, 1), tr = trainOf(t), topT = S.days[iso(t)]?.top || [], nT = topT.filter(s => s && s.trim()).length;
+  const hot = d.getHours() >= 19 && nT < 3;
+  const pdText = `${GG[t.getDay()]}: ${!tr ? 'riposo' : tr.skip ? 'allenamento saltato' : esc(tr.n.toLowerCase()) + ' alle ' + esc(tr.t)}.<br>${nT === 3 ? 'Priorità di domani pronte.' : nT ? `Priorità di domani: ${nT} di 3.` : 'Scegli le 3 priorità.'}`;
+  return widget('a-hab', 'habits', 'habit', 'Abitudini', `<span class="meta">${n} di ${HAB.length}</span>`, habs)
+    + widget('a-ag', 'agenda', 'clock', 'Agenda', '', ag)
+    + widget('a-pr', 'prio', 'list', 'Priorità', '', pr)
+    + widget('a-so', 'late', 'hourglass', 'In sospeso', badge(late.length), so)
+    + widget('a-pd' + (hot ? ' hot' : ''), 'tomorrow', 'moon', 'Prepara domani', '',
+      `<div class="pd"><p>${pdText}</p><button class="pill${hot ? ' solid' : ''}" data-act="open" data-p="tomorrow">${nT ? 'Modifica' : 'Inizia'}</button></div>`);
+}
+
+// Contenuto dei pannelli (tappa 1: le funzioni di sempre; il nuovo aspetto arriva alla tappa 2).
+function panelBody(p) {
+  const d = new Date(), ds = iso(d), day = S.days[ds] || {}, h = day.h || {};
+  if (p === 'habits') {
+    const tr = trainOf(d);
+    const trHab = !tr ? 'Oggi riposo: spunta se hai rispettato il piano' : tr.skip ? esc(tr.why) : 'In programma: ' + esc(tr.n) + ' alle ' + esc(tr.t) + (tr.why ? ' (spostato)' : '');
+    return ['Abitudini', `<ul class="habits">${HAB.map(([k, l]) => `<li><button class="hab${h[k] ? ' on' : ''}" data-act="hab" data-d="${ds}" data-k="${esc(k)}" aria-pressed="${!!h[k]}">
+      <span class="tick"></span><span class="hl">${esc(l)}${k === 'allen' ? `<small>${trHab}</small>` : ''}</span><span class="streak">${streak(k)}</span></button></li>`).join('')}</ul>`];
+  }
+  if (p === 'agenda') return ['Agenda di oggi', agenda(d)];
+  if (p === 'prio') {
+    const top = day.top || ['', '', ''], topd = day.topd || [false, false, false];
+    const ph = ['La cosa più importante di oggi', 'Seconda priorità', 'Terza priorità'];
+    return ['3 priorità', [0, 1, 2].map(i => `<div class="pri${topd[i] ? ' on' : ''}"><button class="chk${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-label="Priorità ${i + 1} fatta" aria-pressed="${!!topd[i]}"></button>
+      <input id="pri${i}" data-act="top" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1}"></div>`).join('')];
+  }
+  if (p === 'late') return ['In sospeso', lateCard(ds) || '<p class="empty">Niente in sospeso: sei in pari.</p>'];
+  if (p === 'tomorrow') return ['Prepara domani', tomorrowCard(addD(d, 1))];
+  if (p === 'add') {
+    const v = cur(), m = addD(monday(d), weekOff * 7);
+    const def = v === 'mese' && selDay ? selDay : v === 'settimana' && weekOff ? iso(m) : ds;
+    return ['Aggiungi attività', addForm(def)];
+  }
+  if (p === 'menu') {
+    const pr = pushState === 'on' ? '<section class="card"><h2>Promemoria serale</h2><p class="sub">Attivi: ogni sera alle 21:30.</p><div class="row"><button class="ghost" data-act="pushtest">Invia notifica di prova</button></div></section>' : pushCard();
+    return ['Impostazioni', `${pr}<div class="foot"><button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div><p class="hint center">Versione ${VERSION}</p>`];
+  }
+  return ['', ''];
 }
 // Dalle 19:00: le 3 priorità di domani (salvate nel giorno di domani).
 function tomorrowCard(t) {
@@ -339,6 +440,11 @@ function viewMese() {
 function sheetView() {
   if (!sheet) return '';
   let body = '';
+  if (sheet.kind === 'panel') {
+    const [title, html] = panelBody(sheet.p);
+    body = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="wh" style="font-size:18px"><span>${esc(title)}</span>
+      <button class="rbtn glass" style="margin-left:auto;width:40px;height:40px" data-act="close" aria-label="Chiudi">${svg('x')}</button></div>${html}</div>`;
+  }
   if (sheet.kind === 'task') {
     const t = S.tasks[sheet.id]; if (!t) { sheet = null; return ''; }
     body = `<form class="card sheet" data-form="edit" data-id="${sheet.id}"><h2>Modifica attività</h2>
@@ -377,7 +483,8 @@ function viewLogin() {
   <button class="alt" data-act="swap">${signup ? 'Ho già un account' : 'Prima volta? Crea l’account'}</button></section>`;
 }
 
-const VIEWS = { oggi: viewOggi, settimana: viewSett, mese: viewMese };
+const VIEWS = { oggi: viewGiorno, settimana: viewSett, mese: viewMese };
+const NEW_LAYOUT = { oggi: true };   // livelli già ridisegnati a widget (gli altri: tappe 3 e 4)
 function cur() { const h = location.hash.slice(1); return VIEWS[h] ? h : 'oggi'; }
 function render(force) {
   const a = document.activeElement;
@@ -386,10 +493,7 @@ function render(force) {
   document.body.classList.toggle('out', !user);
   if (!user) { app.innerHTML = viewLogin(); return; }
   const v = cur();
-  for (const l of document.querySelectorAll('.tabs a')) {
-    if (l.getAttribute('href') === '#' + v) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current');
-  }
-  app.innerHTML = VIEWS[v]() + sheetView();
+  app.innerHTML = `<div class="shell">${shellHead(v)}<section class="board ${NEW_LAYOUT[v] ? v : 'legacy'}">${VIEWS[v]()}</section></div>` + sheetView();
 }
 
 // ---------- Eventi ----------
@@ -397,7 +501,9 @@ app.addEventListener('focusout', () => setTimeout(() => { if (pending && !app.co
 app.addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b || b.tagName === 'INPUT') return;
   const a = b.dataset.act, id = b.dataset.id;
-  if (a === 'hab') { const ds = b.dataset.d, h = { ...(S.days[ds]?.h || {}) }; h[b.dataset.k] = !h[b.dataset.k]; setDay(ds, { h }); }
+  if (a === 'hab') { const ds = b.dataset.d, h = { ...(S.days[ds]?.h || {}) }; h[b.dataset.k] = !h[b.dataset.k]; popKey = h[b.dataset.k] ? ds + b.dataset.k : ''; setDay(ds, { h }); popKey = ''; }
+  else if (a === 'open') { sheet = { kind: 'panel', p: b.dataset.p }; render(true); }
+  else if (a === 'add' || a === 'menu') { sheet = { kind: 'panel', p: a }; render(true); }
   else if (a === 'topd') { const ds = iso(new Date()), td = [...(S.days[ds]?.topd || [false, false, false])]; td[+b.dataset.i] = !td[+b.dataset.i]; setDay(ds, { topd: td }); }
   else if (a === 'done' && S.tasks[id]) put('tasks', id, { ...S.tasks[id], done: !S.tasks[id].done });
   else if (a === 'del' && S.tasks[id]) { lastDel = ['tasks', id, S.tasks[id]]; put('tasks', id, null); flash('Attività eliminata', true); }
@@ -427,7 +533,12 @@ app.addEventListener('change', e => {
   const ds = t.dataset.d || iso(new Date()), top = [...(S.days[ds]?.top || ['', '', ''])]; top[+t.dataset.i] = t.value.trim();
   setDay(ds, { top }, true);
 });
-app.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.dataset.act === 'top') e.target.blur(); });
+app.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset.act === 'top') e.target.blur();
+  // Widget da tastiera: Invio o spazio lo aprono.
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset.act === 'open' && e.target.tagName === 'DIV') { e.preventDefault(); e.target.click(); }
+  if (e.key === 'Escape' && sheet) { sheet = null; render(true); }
+});
 app.addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target, fd = new FormData(f);
@@ -450,6 +561,7 @@ app.addEventListener('submit', async e => {
       const id = f.dataset.id; if (!S.tasks[id]) return;
       sheet = null; put('tasks', id, { ...S.tasks[id], ...v, date: fd.get('date') || null }); flash('Salvato'); return;
     }
+    if (f.dataset.form === 'task') sheet = null;   // "Aggiungi" dal pulsante +: chiude il pannello
     put('tasks', uid(), { ...v, date: f.dataset.form === 'someday' ? null : (fd.get('date') || iso(new Date())), done: false });
   }
   else put('goals', uid(), { title, month: f.dataset.m, area: fd.get('area') || 'pers', done: false });
