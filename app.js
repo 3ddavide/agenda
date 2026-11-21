@@ -33,7 +33,7 @@ const app = document.getElementById('app'), note = document.getElementById('note
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
 // Versione mostrata in fondo alla pagina: aggiornala insieme ai "?v=" in index.html a ogni pubblicazione.
-const VERSION = '2026-11-21.3';
+const VERSION = '2026-11-21.4';
 const chain = {};
 
 function flash(msg, undo, ms) { tmsg.textContent = msg; tundo.hidden = !undo; toast.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => toast.classList.remove('show'), ms || (undo ? 5000 : 1800)); }

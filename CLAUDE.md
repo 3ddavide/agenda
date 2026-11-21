@@ -7,7 +7,7 @@ non dare per scontato che conosca la programmazione e spiega cosa stai per fare 
 ## Come è fatta
 
 - `index.html`: la pagina (struttura e stile). Nessun build step, nessun framework.
-- `app.js`: tutta la logica (viste Oggi / Settimana / Mese, login, salvataggio).
+- `app.js`: tutta la logica (livelli Giorno / Settimana / Mese a widget, pannelli, login, salvataggio).
 - `config.js`: la settimana tipo dell'utente (abitudini, orari università, allenamenti,
   impegni ricorrenti) più URL e chiave anon di Supabase. **Per cambiare orari o abitudini
   si modifica solo questo file.**
@@ -23,15 +23,45 @@ non dare per scontato che conosca la programmazione e spiega cosa stai per fare 
   l'autorizzazione è dentro la funzione.
 - `supabase/migrazione_*.sql`: migrazioni già eseguite dall'utente, in ordine di creazione.
 - `.segreti/` (esclusa da git con `.gitignore`): file locali con segreti, mai da pubblicare.
+- `_prova/` (esclusa da git): anteprime e prove locali con un finto Supabase (`build.sh`,
+  `build-artifact.sh` per l'anteprima privata su claude.ai senza chiavi).
 
 Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
+
+## Interfaccia (a widget)
+
+- **Principio:** su iPhone (390 × 844) ogni livello sta in una schermata senza scorrere
+  (scorrere è ammesso solo sotto 720 px di altezza, es. iPhone SE). Il widget mostra
+  un'anteprima; toccandolo si apre un **pannello dal basso** con la funzione completa.
+- **Cornice uguale per i tre livelli** (`shellHead` in `app.js`): data piccola + titolo grande,
+  pulsanti rotondi **⋯** (Impostazioni) e **+** (Aggiungi attività, da qualsiasi livello);
+  sotto, il selettore **Giorno / Settimana / Mese** (route `#oggi`, `#settimana`, `#mese`) con
+  la data di riferimento. In Settimana e Mese, frecce ‹ › e "oggi" accanto alla data.
+- **Griglia a 2 colonne** (`.board.<livello>` con `grid-template-areas` in `index.html`):
+  piccolo 1×1, largo 2×1, alto 1×2, grande 2×2 (solo il Calendario).
+- **Giorno** (`viewGiorno`): Abitudini (largo, cerchi spuntabili dal widget), Agenda (alto,
+  linea "adesso", passati barrati), Priorità (piccolo, spuntabili), In sospeso (piccolo,
+  contatore), Prepara domani (largo basso, in evidenza dalle 19 finché le priorità non sono 3).
+- **Settimana** (`viewSett`): Abitudini (griglia pallini, prime 3 + "+N", percentuale),
+  Giorni (alto, impegno principale per giorno: `mainOf`), Allenamenti (fatti/previsti da piano
+  in config.js + abitudine `allen`), Prima o poi, Review della settimana (checklist; spunte
+  salvate SOLO nel telefono in localStorage `agenda-review-<lunedì>`).
+- **Mese** (`viewMese`): Calendario 2×2 (sfondo più scuro = più abitudini, oggi nero, pallino
+  = scadenza, tocco = pannello del giorno), Scadenze (del mese + in arrivo), Obiettivi
+  (spuntabili), Statistiche (barre per abitudine), Impegni fissi (riassunto da config.js).
+- **Pannelli** (`sheetView`, `panelBody`, `panelSub`): si fermano sotto il selettore, che
+  resta visibile; si chiudono con ✕, tocco fuori, Esc, trascinando in giù; cambiare livello
+  li chiude. Animazioni spente con "Riduci movimento".
+- **Impostazioni (⋯):** tema Automatico / Chiaro / Scuro (localStorage `agenda-tema`, imposta
+  `data-theme` su `<html>`), promemoria (attiva / notifica di prova), backup, esci, versione.
 
 ## Promemoria serale (notifiche push)
 
 - Ogni sera alle **21:30 ora italiana**: "Prepara domani" con il numero di attività in sospeso,
   oppure, se le priorità di domani sono già scritte, un promemoria per le abitudini.
-- Nell'app: riquadro "Attiva promemoria" in Oggi (solo se non attivi) e "Invia notifica di
-  prova" nel fondo pagina. Su iPhone funziona solo aprendo l'agenda dall'icona Home (iOS 16.4+).
+- Nell'app: nelle Impostazioni (⋯) "Attiva promemoria" (con un pallino sul ⋯ finché non
+  sono attivi) e "Invia notifica di prova". Su iPhone funziona solo aprendo l'agenda
+  dall'icona Home (iOS 16.4+).
 - Chiave VAPID **pubblica** in `config.js` (`vapidPublicKey`) e in `index.ts` (devono coincidere);
   la **privata** SOLO nel segreto `VAPID_PRIVATE_KEY` di Supabase (Edge Functions → Secrets).
 - Programmazione (`supabase/migrazione_promemoria_cron.sql`): pg_cron lavora in UTC, quindi due
@@ -72,8 +102,15 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
 - A ogni pubblicazione che cambia `app.js` o `config.js`, aumenta la versione in **tre punti
   uguali**: `VERSION` in `app.js` e i due `?v=` in `index.html`. Senza, l'iPhone può continuare
   a usare i file vecchi (la versione è mostrata in fondo alla pagina per controllarla).
-- Lo stile è volutamente semplice: una colonna, tre schede, pochi colori
-  (blu `--acc` dominante, colori delle aree solo nei pallini).
+- Stile **monocromatico** (nero, bianco, grigi; nessun colore, nemmeno per le aree): il nero
+  pieno `--solid` è riservato a cose fatte, linea "adesso", giorno di oggi, contatori e
+  pulsanti principali. Widget, selettore, pulsanti rotondi e pannelli in **vetro**
+  (sfondo semitrasparente + `backdrop-filter: blur`, bordo chiaro, riflesso in alto, ombra
+  morbida, angoli ~24px) su sfondo grigio sfumato. Font Inter. Tutti i colori sono variabili in
+  `:root`, ridefinite per il tema scuro sia in `prefers-color-scheme: dark` sia in
+  `[data-theme=dark]`. Bersagli tattili ≥ 44px; margini con `env(safe-area-inset-*)`.
+- Prima di pubblicare un cambio d'interfaccia, verifica che i tre livelli stiano in una
+  schermata a 390 × 844 e 375 × 812, in chiaro e in scuro (anteprima in `_prova/`).
 
 ## Idee per il futuro (agenti)
 
