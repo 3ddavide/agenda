@@ -27,6 +27,7 @@ const isRest = w => !plan(w).t;
 
 const S = { days: {}, tasks: {}, goals: {} };
 let sb = null, user = null, weekOff = 0, monthOff = 0, selDay = null, pending = false, lastDel = null, signup = false;
+let sheet = null;   // modulo aperto: { kind: 'task', id } oppure { kind: 'fx', ds, k }
 const app = document.getElementById('app'), note = document.getElementById('note');
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
@@ -40,7 +41,7 @@ function cacheLoad() { try { const v = JSON.parse(localStorage.getItem(CACHE) ||
 const KEY = { days: 'date', tasks: 'id', goals: 'id' };
 function toRow(col, id, v) {
   const base = { user_id: user.id };
-  if (col === 'days') return { ...base, date: id, h: v.h || {}, top: v.top || null, topd: v.topd || null };
+  if (col === 'days') return { ...base, date: id, h: v.h || {}, top: v.top || null, topd: v.topd || null, fx: v.fx && Object.keys(v.fx).length ? v.fx : null };
   if (col === 'tasks') return { ...base, id, title: v.title, date: v.date || null, time: v.time || null, end_time: v.end || null, area: v.area || 'pers', dl: !!v.dl, done: !!v.done };
   return { ...base, id, title: v.title, month: v.month, area: v.area || 'pers', done: !!v.done };
 }
@@ -65,7 +66,7 @@ async function loadAll() {
   const bad = res.find(r => r.error);
   if (bad) { note.textContent = 'Non riesco a leggere i dati (' + bad.error.message + ').'; return; }
   const [d, t, g] = res.map(r => r.data);
-  S.days = Object.fromEntries(d.map(r => [r.date, { h: r.h || {}, ...(r.top ? { top: r.top } : {}), ...(r.topd ? { topd: r.topd } : {}) }]));
+  S.days = Object.fromEntries(d.map(r => [r.date, { h: r.h || {}, ...(r.top ? { top: r.top } : {}), ...(r.topd ? { topd: r.topd } : {}), ...(r.fx ? { fx: r.fx } : {}) }]));
   S.tasks = Object.fromEntries(t.map(r => [r.id, { title: r.title, date: r.date, time: r.time || '', end: r.end_time || '', area: r.area, dl: r.dl, done: r.done }]));
   S.goals = Object.fromEntries(g.map(r => [r.id, { title: r.title, month: r.month, area: r.area, done: r.done }]));
   note.textContent = '';
@@ -83,18 +84,37 @@ function recurringOn(d) {
     if (r.weekdays) hit = r.weekdays.includes(w);
     else if (r.everyDays && r.anchor) { const gap = Math.round((parse(ds) - parse(r.anchor)) / 864e5); hit = gap >= 0 && gap % r.everyDays === 0; }
     if (!hit) continue;
-    const x = { t: r.t || '', e: r.end || '', n: r.name, a: r.area || 'pers', fx: 1, mv: !!r.move };
+    const x = { t: r.t || '', e: r.end || '', n: r.name, a: r.area || 'pers', fx: 1, mv: !!r.move, k: 'rec:' + (r.id || r.name) };
     if (r.t) { x.rs = toMin(r.t); x.re = r.end ? toMin(r.end) : x.rs + (r.dur || PL.defaultDur); }
-    out.push(x);
+    out.push(override(x, ds));
   }
   return out;
+}
+// Modifiche "solo per questo giorno" salvate in days.fx: { chiave: { skip: true } | { t: "HH:MM" } }.
+function override(x, ds) {
+  x.t0 = x.t;
+  const ov = S.days[ds]?.fx?.[x.k];
+  if (!ov) return x;
+  x.mv = false; x.ov = 1;
+  if (ov.skip) { x.skip = true; x.why = 'Saltato solo per questo giorno'; }
+  else if (ov.t && x.rs != null) {
+    const len = x.re - x.rs, s = toMin(ov.t);
+    x.why = 'Orario cambiato solo per questo giorno (di solito ' + x.t + ')';
+    x.t = ov.t; x.rs = s; x.re = s + len; if (x.e) x.e = toHM(s + len);
+  }
+  return x;
+}
+function setFx(ds, k, val) {
+  const fx = { ...(S.days[ds]?.fx || {}) };
+  if (val) fx[k] = val; else delete fx[k];
+  sheet = null; setDay(ds, { fx });
 }
 // Impegni fissi del giorno. rs / re = inizio e fine in minuti (servono per le sovrapposizioni).
 function fixed(d) {
   const w = d.getDay(), out = [], uni = UNI.days.includes(w);
   if (uni) out.push({ t: UNI.start, n: 'Arrivo in università', a: 'uni', fx: 1, uni: 1, ...(UNI.start && UNI.end ? { rs: toMin(UNI.start), re: toMin(UNI.end) } : {}) });
   out.push(...recurringOn(d));
-  if (!isRest(w)) { const p = plan(w), s = toMin(p.t); out.push({ t: p.t, n: p.name, a: 'sport', fx: 1, train: 1, mv: p.move !== false, rs: s, re: s + (p.dur || PL.trainingDur) }); }
+  if (!isRest(w)) { const p = plan(w), s = toMin(p.t); out.push(override({ t: p.t, n: p.name, a: 'sport', fx: 1, train: 1, k: 'train', mv: p.move !== false, rs: s, re: s + (p.dur || PL.trainingDur) }, iso(d))); }
   if (uni) out.push({ t: UNI.end, n: 'Rientro a casa', a: 'pers', fx: 1, uni: 1 });
   return out;
 }
@@ -119,17 +139,17 @@ function dayPlan(d) {
   const tasks = tasksOn(iso(d)), fx = fixed(d), busy = tasks.filter(x => x.rs != null);
   const names = list => list.map(b => b.n).join(', ');
   // 1) Impegni fissi non spostabili (università, laboratorio): restano, ma segnalati.
-  for (const x of fx) if (x.rs != null && !x.mv) {
+  for (const x of fx) if (x.rs != null && !x.mv && !x.skip) {
     const c = busy.filter(b => overlaps(x, b));
     if (!c.length) continue;
     x.skip = c.some(b => b.rs <= x.rs && b.re >= x.re);
-    x.why = (x.skip ? 'Saltato per ' : 'Sovrapposto a ') + names(c);
+    x.why = (x.why ? x.why + ' · ' : '') + (x.skip ? 'Saltato per ' : 'Sovrapposto a ') + names(c);
   }
   const arrivo = fx.find(x => x.uni && x.rs != null);
   for (const x of fx) if (x.uni && x.rs == null && arrivo?.skip) { x.skip = true; x.why = arrivo.why; }
   // 2) Impegni spostabili (allenamenti, pulizia): se toccano un'attività, si spostano.
   const clash = x => busy.filter(b => overlaps(x, b));
-  const toMove = fx.filter(x => x.rs != null && x.mv && clash(x).length);
+  const toMove = fx.filter(x => x.rs != null && x.mv && !x.skip && clash(x).length);
   const blocks = [...busy, ...fx.filter(x => x.rs != null && !x.skip && !toMove.includes(x))];
   for (const x of toMove) {
     const c = clash(x), len = x.re - x.rs, s = freeSlot(blocks, len, x.rs);
@@ -150,14 +170,17 @@ function streak(k) {
   return n > 1 ? n + ' giorni di fila' : '';
 }
 
+// Titolo di un'attività: toccandolo si apre il modulo di modifica.
+const taskName = (id, title) => `<button class="nm lk" data-act="edit" data-id="${id}" aria-label="Modifica: ${esc(title)}">${esc(title)}</button>`;
 function agenda(d) {
   const it = dayPlan(d);
   if (!it.length) return '<p class="empty">Niente in programma.</p>';
   return '<ul class="ag">' + it.map(x => `<li class="${x.done ? 'done' : ''}${x.skip ? ' skip' : ''}">
     <span class="tm">${x.t ? esc(x.t) + (x.e ? '<small>' + esc(x.e) + '</small>' : '') : '—'}</span>
     <span class="dot ${esc(x.a)}"></span>
-    <span class="tt${x.fx ? ' fx' : ''}">${x.dl ? '<span class="dl">Scadenza · </span>' : ''}<span class="nm">${esc(x.n)}</span>${x.why ? '<small class="why">' + esc(x.why) + '</small>' : ''}</span>
-    ${x.id ? `<span class="acts"><button class="mini${x.done ? ' on' : ''}" data-act="done" data-id="${x.id}" aria-label="Segna come fatto">✓</button><button class="mini" data-act="del" data-id="${x.id}" aria-label="Elimina">×</button></span>` : '<span></span>'}
+    <span class="tt${x.fx ? ' fx' : ''}">${x.dl ? '<span class="dl">Scadenza · </span>' : ''}${x.id ? taskName(x.id, x.n) : `<span class="nm">${esc(x.n)}</span>`}${x.why ? '<small class="why">' + esc(x.why) + '</small>' : ''}</span>
+    ${x.id ? `<span class="acts"><button class="mini${x.done ? ' on' : ''}" data-act="done" data-id="${x.id}" aria-label="Segna come fatto">✓</button><button class="mini" data-act="del" data-id="${x.id}" aria-label="Elimina">×</button></span>`
+      : x.k ? `<span class="acts"><button class="mini${x.ov ? ' ovr' : ''}" data-act="fx" data-d="${iso(d)}" data-k="${esc(x.k)}" aria-label="Opzioni per ${esc(x.n)}">⋯</button></span>` : '<span></span>'}
   </li>`).join('') + '</ul>';
 }
 const areaOpts = sel => Object.entries(AREE).map(([k, v]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${v}</option>`).join('');
@@ -186,8 +209,26 @@ function viewOggi() {
     <span class="streak">${streak(k)}</span></button></li>`).join('')}</ul></section>
   <section class="card"><h2>3 priorità</h2>${[0, 1, 2].map(i => `<div class="pri${topd[i] ? ' on' : ''}"><button class="chk${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-label="Priorità ${i + 1} fatta" aria-pressed="${!!topd[i]}"></button>
     <input id="pri${i}" data-act="top" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1}"></div>`).join('')}</section>
+  ${d.getHours() >= 19 ? tomorrowCard(addD(d, 1)) : ''}
+  ${lateCard(ds)}
   <section class="card"><h2>Agenda di oggi</h2>${agenda(d)}</section>
   ${addForm(ds)}${footer()}`;
+}
+// Dalle 19:00: le 3 priorità di domani (salvate nel giorno di domani).
+function tomorrowCard(t) {
+  const ds = iso(t), top = S.days[ds]?.top || ['', '', ''];
+  const ph = ['La cosa più importante di domani', 'Seconda priorità', 'Terza priorità'];
+  return `<section class="card"><h2>Prepara domani</h2><p class="sub">${GG[t.getDay()]} ${t.getDate()} ${MM[t.getMonth()]}</p>
+  ${[0, 1, 2].map(i => `<div class="pri"><span class="pn">${i + 1}</span><input data-act="top" data-d="${ds}" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1} di domani"></div>`).join('')}</section>`;
+}
+// Attività di giorni passati non completate.
+function lateCard(today) {
+  const late = Object.entries(S.tasks).filter(([, t]) => t.date && t.date < today && !t.done).sort((a, b) => a[1].date.localeCompare(b[1].date));
+  if (!late.length) return '';
+  return `<section class="card"><h2>In sospeso</h2><ul class="ag">${late.map(([id, t]) => { const d = parse(t.date); return `<li>
+    <span class="tm">${d.getDate()} ${MM[d.getMonth()].slice(0, 3)}</span><span class="dot ${esc(t.area || 'pers')}"></span>
+    <span class="tt">${t.dl ? '<span class="dl">Scadenza · </span>' : ''}${taskName(id, t.title)}</span>
+    <span class="acts"><button class="mini txt" data-act="mv" data-id="${id}" data-v="0" aria-label="Sposta a oggi">A oggi</button><button class="mini txt" data-act="mv" data-id="${id}" data-v="1" aria-label="Sposta a domani">A domani</button></span></li>`; }).join('')}</ul></section>`;
 }
 
 function viewSett() {
@@ -203,7 +244,18 @@ function viewSett() {
   }).join('')}</tr>`).join('')}
   <tr class="pct"><th scope="row">Totale</th>${days.map(d => { const ds = iso(d); return `<td>${ds > today ? '–' : Math.round(pctDay(ds) * 100) + '%'}</td>`; }).join('')}</tr></tbody></table></div></section>
   <section class="days">${days.map(d => `<div class="day${iso(d) === today ? ' today' : ''}"><h3>${GG[d.getDay()]} <span>${d.getDate()}</span></h3>${agenda(d)}</div>`).join('')}</section>
+  ${somedayCard()}
   ${addForm(inWeek ? today : iso(m))}${footer()}`;
+}
+// Attività senza data: da fare "prima o poi".
+function somedayCard() {
+  const list = Object.entries(S.tasks).filter(([, t]) => !t.date).sort((a, b) => (a[1].done - b[1].done) || a[1].title.localeCompare(b[1].title));
+  return `<section class="card"><h2>Prima o poi</h2>
+  ${list.length ? '<ul class="ag">' + list.map(([id, t]) => `<li class="${t.done ? 'done' : ''}"><span class="tm">—</span><span class="dot ${esc(t.area || 'pers')}"></span>
+    <span class="tt">${t.dl ? '<span class="dl">Scadenza · </span>' : ''}${taskName(id, t.title)}</span>
+    <span class="acts"><button class="mini${t.done ? ' on' : ''}" data-act="done" data-id="${id}" aria-label="Segna come fatto">✓</button><button class="mini" data-act="del" data-id="${id}" aria-label="Elimina">×</button></span></li>`).join('') + '</ul>'
+    : '<p class="empty">Le cose da fare senza una data precisa. Toccane una per darle un giorno.</p>'}
+  <form data-form="someday"><div class="row"><input name="title" placeholder="Riparare la bici" required aria-label="Nuova attività senza data"><select name="area" aria-label="Area">${areaOpts('pers')}</select><button class="primary">Aggiungi</button></div></form></section>`;
 }
 
 function viewMese() {
@@ -227,6 +279,33 @@ function viewMese() {
   <section class="card"><h2>Obiettivi di ${MM[first.getMonth()]}</h2>
   ${goals.length ? '<ul class="goals">' + goals.map(([id, g]) => `<li class="${g.done ? 'done' : ''}"><button class="chk${g.done ? ' on' : ''}" data-act="gdone" data-id="${id}" aria-label="Obiettivo raggiunto" aria-pressed="${!!g.done}"></button><i class="dot ${esc(g.area || 'pers')}"></i><span class="tt">${esc(g.title)}</span><button class="mini" data-act="gdel" data-id="${id}" aria-label="Elimina obiettivo">×</button></li>`).join('') + '</ul>' : '<p class="empty">Scegli uno o due obiettivi per questo mese, non di più.</p>'}
   <form data-form="goal" data-m="${mk}"><div class="row"><input name="title" placeholder="3 allenamenti a settimana per tutto il mese" required aria-label="Nuovo obiettivo"><select name="area" aria-label="Area">${areaOpts('sport')}</select><button class="primary">Aggiungi</button></div></form></section>${footer()}`;
+}
+
+// Modulo che si apre sopra la pagina (modifica attività, opzioni impegni fissi).
+function sheetView() {
+  if (!sheet) return '';
+  let body = '';
+  if (sheet.kind === 'task') {
+    const t = S.tasks[sheet.id]; if (!t) { sheet = null; return ''; }
+    body = `<form class="card sheet" data-form="edit" data-id="${sheet.id}"><h2>Modifica attività</h2>
+    <input name="title" value="${esc(t.title)}" required aria-label="Attività">
+    <div class="row"><input type="date" name="date" value="${esc(t.date || '')}" aria-label="Giorno (vuoto = Prima o poi)"><select name="area" aria-label="Area">${areaOpts(t.area || 'pers')}</select></div>
+    <div class="row"><label class="tl">Dalle<input type="time" name="time" value="${esc(t.time || '')}" aria-label="Ora di inizio"></label><label class="tl">alle<input type="time" name="end" value="${esc(t.end || '')}" aria-label="Ora di fine"></label></div>
+    <label class="cb"><input type="checkbox" name="dl"${t.dl ? ' checked' : ''}> È una scadenza (esame, consegna)</label>
+    <p class="hint">Senza data l'attività va in “Prima o poi” (scheda Settimana).</p>
+    <div class="row end"><button type="button" class="ghost" data-act="close">Annulla</button><button class="primary">Salva</button></div></form>`;
+  }
+  if (sheet.kind === 'fx') {
+    const d = parse(sheet.ds), x = fixed(d).find(f => f.k === sheet.k); if (!x) { sheet = null; return ''; }
+    const when = sheet.ds === iso(new Date()) ? 'oggi' : GG[d.getDay()].toLowerCase() + ' ' + d.getDate();
+    body = `<form class="card sheet" data-form="fxtime" data-d="${sheet.ds}" data-k="${esc(sheet.k)}"><h2>${esc(x.n)}</h2>
+    <p class="sub">${GG[d.getDay()]} ${d.getDate()} ${MM[d.getMonth()]} · di solito alle ${esc(x.t0)}</p>
+    <div class="row"><button type="button" class="ghost" data-act="fxskip">Salta solo ${when}</button></div>
+    <div class="row"><label class="tl">Nuovo orario<input type="time" name="t" value="${esc(x.skip ? x.t0 : x.t)}" required></label><button class="primary">Sposta solo ${when}</button></div>
+    ${x.ov ? '<div class="row"><button type="button" class="ghost" data-act="fxreset">Ripristina come al solito</button></div>' : ''}
+    <div class="row end"><button type="button" class="ghost" data-act="close">Annulla</button></div></form>`;
+  }
+  return `<div class="ov" data-act="close">${body}</div>`;
 }
 
 function footer() { return `<div class="foot"><button class="ghost" data-act="export">Scarica backup</button><button class="ghost" data-act="logout">Esci</button></div>`; }
@@ -253,7 +332,7 @@ function render(force) {
   for (const l of document.querySelectorAll('.tabs a')) {
     if (l.getAttribute('href') === '#' + v) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current');
   }
-  app.innerHTML = VIEWS[v]();
+  app.innerHTML = VIEWS[v]() + sheetView();
 }
 
 // ---------- Eventi ----------
@@ -265,6 +344,12 @@ app.addEventListener('click', async e => {
   else if (a === 'topd') { const ds = iso(new Date()), td = [...(S.days[ds]?.topd || [false, false, false])]; td[+b.dataset.i] = !td[+b.dataset.i]; setDay(ds, { topd: td }); }
   else if (a === 'done' && S.tasks[id]) put('tasks', id, { ...S.tasks[id], done: !S.tasks[id].done });
   else if (a === 'del' && S.tasks[id]) { lastDel = ['tasks', id, S.tasks[id]]; put('tasks', id, null); flash('Attività eliminata', true); }
+  else if (a === 'edit' && S.tasks[id]) { sheet = { kind: 'task', id }; render(true); }
+  else if (a === 'close') { if (b.classList.contains('ov') && e.target !== b) return; sheet = null; render(true); }
+  else if (a === 'fx') { sheet = { kind: 'fx', ds: b.dataset.d, k: b.dataset.k }; render(true); }
+  else if (a === 'fxskip' && sheet?.kind === 'fx') { setFx(sheet.ds, sheet.k, { skip: true }); flash('Saltato solo per questo giorno'); }
+  else if (a === 'fxreset' && sheet?.kind === 'fx') { setFx(sheet.ds, sheet.k, null); flash('Ripristinato'); }
+  else if (a === 'mv' && S.tasks[id]) { const to = +b.dataset.v; put('tasks', id, { ...S.tasks[id], date: iso(addD(new Date(), to)) }); flash(to ? 'Spostata a domani' : 'Spostata a oggi'); }
   else if (a === 'gdone' && S.goals[id]) put('goals', id, { ...S.goals[id], done: !S.goals[id].done });
   else if (a === 'gdel' && S.goals[id]) { lastDel = ['goals', id, S.goals[id]]; put('goals', id, null); flash('Obiettivo eliminato', true); }
   else if (a === 'wk') { weekOff += +b.dataset.v; render(true); }
@@ -280,7 +365,7 @@ app.addEventListener('click', async e => {
 });
 app.addEventListener('change', e => {
   const t = e.target; if (t.dataset.act !== 'top') return;
-  const ds = iso(new Date()), top = [...(S.days[ds]?.top || ['', '', ''])]; top[+t.dataset.i] = t.value.trim();
+  const ds = t.dataset.d || iso(new Date()), top = [...(S.days[ds]?.top || ['', '', ''])]; top[+t.dataset.i] = t.value.trim();
   setDay(ds, { top }, true);
 });
 app.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.dataset.act === 'top') e.target.blur(); });
@@ -295,12 +380,18 @@ app.addEventListener('submit', async e => {
     if (!r.data.session) { err.textContent = 'Account creato: conferma dal link nell’email, poi accedi.'; signup = false; return; }
     user = r.data.session.user; render(true); loadAll(); return;
   }
+  if (f.dataset.form === 'fxtime') { const t = String(fd.get('t') || ''); if (t) { setFx(f.dataset.d, f.dataset.k, { t }); flash('Orario cambiato solo per questo giorno'); } return; }
   const title = String(fd.get('title') || '').trim(); if (!title) return;
-  if (f.dataset.form === 'task') {
+  if (f.dataset.form === 'task' || f.dataset.form === 'edit' || f.dataset.form === 'someday') {
     let time = String(fd.get('time') || ''), end = String(fd.get('end') || '');
     if (fd.get('allday')) { time = PL.from; end = PL.to; }
     if (end && (!time || end <= time)) { flash('L’ora di fine deve essere dopo quella di inizio'); return; }
-    put('tasks', uid(), { title, date: fd.get('date') || iso(new Date()), time, end, area: fd.get('area') || 'pers', dl: !!fd.get('dl'), done: false });
+    const v = { title, time, end, area: fd.get('area') || 'pers', dl: !!fd.get('dl') };
+    if (f.dataset.form === 'edit') {
+      const id = f.dataset.id; if (!S.tasks[id]) return;
+      sheet = null; put('tasks', id, { ...S.tasks[id], ...v, date: fd.get('date') || null }); flash('Salvato'); return;
+    }
+    put('tasks', uid(), { ...v, date: f.dataset.form === 'someday' ? null : (fd.get('date') || iso(new Date())), done: false });
   }
   else put('goals', uid(), { title, month: f.dataset.m, area: fd.get('area') || 'pers', done: false });
   flash('Aggiunto');

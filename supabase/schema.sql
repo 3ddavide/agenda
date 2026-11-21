@@ -10,6 +10,7 @@ create table if not exists public.days (
   h jsonb not null default '{}'::jsonb,        -- es. {"sveglia": true, "medit": false}
   top jsonb,                                   -- es. ["Ripasso cap. 4", "", ""]
   topd jsonb,                                  -- es. [true, false, false]
+  fx jsonb,                                    -- impegni fissi cambiati solo quel giorno, es. {"train": {"skip": true}}
   updated_at timestamptz not null default now(),
   primary key (user_id, date)
 );

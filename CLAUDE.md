@@ -20,9 +20,12 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
 ## Modello dei dati
 
 - `days` (chiave `user_id` + `date`): `h` = oggetto JSON abitudine → true/false
-  (chiavi come in `config.js` → `habits[].k`), `top` = 3 priorità, `topd` = 3 booleani.
+  (chiavi come in `config.js` → `habits[].k`), `top` = 3 priorità, `topd` = 3 booleani,
+  `fx` = impegni fissi cambiati solo quel giorno (`{"train": {"skip": true}, "rec:<nome>": {"t": "HH:MM"}}`).
+  Le chiavi `rec:` usano il `name` (o `id`) dell'impegno in `config.js`: rinominarlo fa perdere le modifiche.
 - `tasks`: attività singole con `date`, `time` ("HH:MM" o vuoto), `end_time` (fine fascia), `area`
   (`uni` | `sport` | `lavoro` | `pers` | `eventi`), `dl` (scadenza), `done`.
+  `date` vuota = elenco "Prima o poi" (vista Settimana).
 - `goals`: obiettivi del mese con `month` ("AAAA-MM").
 - Gli impegni fissi (università, laboratorio, allenamenti, pulizia camera) NON sono nel
   database: vengono calcolati da `config.js` ogni volta che si apre l'app.
