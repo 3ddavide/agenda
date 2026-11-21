@@ -21,11 +21,14 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
 
 - `days` (chiave `user_id` + `date`): `h` = oggetto JSON abitudine → true/false
   (chiavi come in `config.js` → `habits[].k`), `top` = 3 priorità, `topd` = 3 booleani.
-- `tasks`: attività singole con `date`, `time` ("HH:MM" o vuoto), `area`
+- `tasks`: attività singole con `date`, `time` ("HH:MM" o vuoto), `end_time` (fine fascia), `area`
   (`uni` | `sport` | `lavoro` | `pers` | `eventi`), `dl` (scadenza), `done`.
 - `goals`: obiettivi del mese con `month` ("AAAA-MM").
 - Gli impegni fissi (università, laboratorio, allenamenti, pulizia camera) NON sono nel
   database: vengono calcolati da `config.js` ogni volta che si apre l'app.
+- Riorganizzazione (`dayPlan` in `app.js`): se un'attività con fascia oraria si sovrappone a un
+  impegno fisso spostabile (allenamenti, `move: true`), questo va nel buco libero più vicino
+  dentro `planner.from`–`planner.to`; università e laboratorio non si spostano ma vengono segnati.
 
 ## Regole
 

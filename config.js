@@ -21,7 +21,14 @@ window.AGENDA_CONFIG = {
   // Università: giorni (0 = domenica, 1 = lunedì … 6 = sabato) e orari.
   uni: { days: [1, 2, 3, 4, 5], start: "09:00", end: "20:00" },
 
+  // Riorganizzazione automatica della giornata: se aggiungi un'attività con orario di
+  // inizio e fine che si sovrappone a un impegno spostabile (allenamenti, impegni con
+  // move: true), l'app lo sposta nel buco libero più vicino tra "from" e "to".
+  // trainingDur / defaultDur = durata in minuti quando non c'è un orario di fine.
+  planner: { from: "07:00", to: "22:30", step: 15, trainingDur: 90, defaultDur: 60 },
+
   // Allenamenti per giorno della settimana. t = orario, null = riposo.
+  // Facoltativi: dur = durata in minuti, move: false = non spostarlo mai.
   training: {
     0: { name: "Corsa", t: "10:00" },
     1: { name: "Palestra", t: "20:30" },
@@ -36,8 +43,9 @@ window.AGENDA_CONFIG = {
   // - weekdays: giorni della settimana; oppure everyDays + anchor (data di partenza)
   // - from / to: periodo di validità (facoltativi, formato AAAA-MM-GG)
   // - area: uni | sport | lavoro | pers | eventi
+  // - end o dur (minuti): quanto dura; move: true = si può spostare se serve
   recurring: [
     { name: "Laboratorio di urbanistica", weekdays: [2, 3], t: "14:00", end: "19:30", area: "uni", from: "2026-09-01", to: null },
-    { name: "Pulizia della camera", everyDays: 14, anchor: "2026-11-21", t: "11:30", area: "pers" }
+    { name: "Pulizia della camera", everyDays: 14, anchor: "2026-11-21", t: "11:30", dur: 60, area: "pers", move: true }
   ]
 };

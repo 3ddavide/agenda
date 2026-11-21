@@ -21,6 +21,7 @@ create table if not exists public.tasks (
   title text not null,
   date date,
   time text,                                   -- "HH:MM" oppure vuoto
+  end_time text,                               -- fine della fascia oraria, "HH:MM" oppure vuoto
   area text not null default 'pers' check (area in ('uni','sport','lavoro','pers','eventi')),
   dl boolean not null default false,           -- true = scadenza (esame, consegna)
   done boolean not null default false,

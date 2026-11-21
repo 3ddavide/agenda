@@ -18,6 +18,10 @@ const addD = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.get
 const monday = d => addD(d, -((d.getDay() + 6) % 7));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const PL = { from: '07:00', to: '22:30', step: 15, trainingDur: 90, defaultDur: 60, ...(C.planner || {}) };
+const toMin = s => { const [h, m] = String(s).split(':').map(Number); return h * 60 + (m || 0); };
+const toHM = n => pad(Math.floor(n / 60)) + ':' + pad(n % 60);
+const overlaps = (a, b) => a.rs < b.re && b.rs < a.re;
 const plan = w => TRAIN[w] || { name: 'Riposo', t: null };
 const isRest = w => !plan(w).t;
 
@@ -37,7 +41,7 @@ const KEY = { days: 'date', tasks: 'id', goals: 'id' };
 function toRow(col, id, v) {
   const base = { user_id: user.id };
   if (col === 'days') return { ...base, date: id, h: v.h || {}, top: v.top || null, topd: v.topd || null };
-  if (col === 'tasks') return { ...base, id, title: v.title, date: v.date || null, time: v.time || null, area: v.area || 'pers', dl: !!v.dl, done: !!v.done };
+  if (col === 'tasks') return { ...base, id, title: v.title, date: v.date || null, time: v.time || null, end_time: v.end || null, area: v.area || 'pers', dl: !!v.dl, done: !!v.done };
   return { ...base, id, title: v.title, month: v.month, area: v.area || 'pers', done: !!v.done };
 }
 async function write(col, id, val) {
@@ -62,7 +66,7 @@ async function loadAll() {
   if (bad) { note.textContent = 'Non riesco a leggere i dati (' + bad.error.message + ').'; return; }
   const [d, t, g] = res.map(r => r.data);
   S.days = Object.fromEntries(d.map(r => [r.date, { h: r.h || {}, ...(r.top ? { top: r.top } : {}), ...(r.topd ? { topd: r.topd } : {}) }]));
-  S.tasks = Object.fromEntries(t.map(r => [r.id, { title: r.title, date: r.date, time: r.time || '', area: r.area, dl: r.dl, done: r.done }]));
+  S.tasks = Object.fromEntries(t.map(r => [r.id, { title: r.title, date: r.date, time: r.time || '', end: r.end_time || '', area: r.area, dl: r.dl, done: r.done }]));
   S.goals = Object.fromEntries(g.map(r => [r.id, { title: r.title, month: r.month, area: r.area, done: r.done }]));
   note.textContent = '';
   cacheSave();
@@ -78,19 +82,65 @@ function recurringOn(d) {
     let hit = false;
     if (r.weekdays) hit = r.weekdays.includes(w);
     else if (r.everyDays && r.anchor) { const gap = Math.round((parse(ds) - parse(r.anchor)) / 864e5); hit = gap >= 0 && gap % r.everyDays === 0; }
-    if (hit) out.push({ t: r.t || '', e: r.end || '', n: r.name, a: r.area || 'pers', fx: 1 });
+    if (!hit) continue;
+    const x = { t: r.t || '', e: r.end || '', n: r.name, a: r.area || 'pers', fx: 1, mv: !!r.move };
+    if (r.t) { x.rs = toMin(r.t); x.re = r.end ? toMin(r.end) : x.rs + (r.dur || PL.defaultDur); }
+    out.push(x);
   }
   return out;
 }
+// Impegni fissi del giorno. rs / re = inizio e fine in minuti (servono per le sovrapposizioni).
 function fixed(d) {
-  const w = d.getDay(), out = [];
-  if (UNI.days.includes(w)) out.push({ t: UNI.start, n: 'Arrivo in università', a: 'uni', fx: 1 });
+  const w = d.getDay(), out = [], uni = UNI.days.includes(w);
+  if (uni) out.push({ t: UNI.start, n: 'Arrivo in università', a: 'uni', fx: 1, uni: 1, ...(UNI.start && UNI.end ? { rs: toMin(UNI.start), re: toMin(UNI.end) } : {}) });
   out.push(...recurringOn(d));
-  if (!isRest(w)) out.push({ t: plan(w).t, n: plan(w).name, a: 'sport', fx: 1 });
-  if (UNI.days.includes(w)) out.push({ t: UNI.end, n: 'Rientro a casa', a: 'pers', fx: 1 });
+  if (!isRest(w)) { const p = plan(w), s = toMin(p.t); out.push({ t: p.t, n: p.name, a: 'sport', fx: 1, train: 1, mv: p.move !== false, rs: s, re: s + (p.dur || PL.trainingDur) }); }
+  if (uni) out.push({ t: UNI.end, n: 'Rientro a casa', a: 'pers', fx: 1, uni: 1 });
   return out;
 }
-function tasksOn(ds) { return Object.entries(S.tasks).filter(([, t]) => t.date === ds).map(([id, t]) => ({ id, t: t.time || '', n: t.title, a: t.area || 'pers', done: !!t.done, dl: !!t.dl })); }
+function tasksOn(ds) {
+  return Object.entries(S.tasks).filter(([, t]) => t.date === ds).map(([id, t]) => {
+    const x = { id, t: t.time || '', e: t.end || '', n: t.title, a: t.area || 'pers', done: !!t.done, dl: !!t.dl };
+    if (x.t && x.e && x.e > x.t) { x.rs = toMin(x.t); x.re = toMin(x.e); }
+    return x;
+  });
+}
+// Primo orario libero (il più vicino a "pref") in cui sta un impegno lungo "len" minuti.
+function freeSlot(blocks, len, pref) {
+  let best = null;
+  for (let s = toMin(PL.from); s + len <= toMin(PL.to); s += PL.step) {
+    if (blocks.some(b => overlaps({ rs: s, re: s + len }, b))) continue;
+    if (best === null || Math.abs(s - pref) < Math.abs(best - pref)) best = s;
+  }
+  return best;
+}
+// La giornata completa: impegni fissi riorganizzati in base alle attività con fascia oraria.
+function dayPlan(d) {
+  const tasks = tasksOn(iso(d)), fx = fixed(d), busy = tasks.filter(x => x.rs != null);
+  const names = list => list.map(b => b.n).join(', ');
+  // 1) Impegni fissi non spostabili (università, laboratorio): restano, ma segnalati.
+  for (const x of fx) if (x.rs != null && !x.mv) {
+    const c = busy.filter(b => overlaps(x, b));
+    if (!c.length) continue;
+    x.skip = c.some(b => b.rs <= x.rs && b.re >= x.re);
+    x.why = (x.skip ? 'Saltato per ' : 'Sovrapposto a ') + names(c);
+  }
+  const arrivo = fx.find(x => x.uni && x.rs != null);
+  for (const x of fx) if (x.uni && x.rs == null && arrivo?.skip) { x.skip = true; x.why = arrivo.why; }
+  // 2) Impegni spostabili (allenamenti, pulizia): se toccano un'attività, si spostano.
+  const clash = x => busy.filter(b => overlaps(x, b));
+  const toMove = fx.filter(x => x.rs != null && x.mv && clash(x).length);
+  const blocks = [...busy, ...fx.filter(x => x.rs != null && !x.skip && !toMove.includes(x))];
+  for (const x of toMove) {
+    const c = clash(x), len = x.re - x.rs, s = freeSlot(blocks, len, x.rs);
+    if (s === null) { x.skip = true; x.why = 'Saltato per ' + names(c) + ': nessun orario libero'; continue; }
+    x.why = 'Spostato dalle ' + x.t + ' per ' + names(c);
+    x.t = toHM(s); if (x.e) x.e = toHM(s + len); x.rs = s; x.re = s + len;
+    blocks.push(x);
+  }
+  return [...fx, ...tasks].sort((a, b) => (a.t || '99').localeCompare(b.t || '99'));
+}
+const trainOf = d => dayPlan(d).find(x => x.train) || null;
 function countDay(ds) { const h = S.days[ds]?.h || {}; return HAB.filter(([k]) => h[k]).length; }
 function pctDay(ds) { return HAB.length ? countDay(ds) / HAB.length : 0; }
 function streak(k) {
@@ -101,13 +151,12 @@ function streak(k) {
 }
 
 function agenda(d) {
-  const ds = iso(d);
-  const it = [...fixed(d), ...tasksOn(ds)].sort((a, b) => (a.t || '99').localeCompare(b.t || '99'));
+  const it = dayPlan(d);
   if (!it.length) return '<p class="empty">Niente in programma.</p>';
-  return '<ul class="ag">' + it.map(x => `<li class="${x.done ? 'done' : ''}">
+  return '<ul class="ag">' + it.map(x => `<li class="${x.done ? 'done' : ''}${x.skip ? ' skip' : ''}">
     <span class="tm">${x.t ? esc(x.t) + (x.e ? '<small>' + esc(x.e) + '</small>' : '') : '—'}</span>
     <span class="dot ${esc(x.a)}"></span>
-    <span class="tt${x.fx ? ' fx' : ''}">${x.dl ? '<span class="dl">Scadenza · </span>' : ''}${esc(x.n)}</span>
+    <span class="tt${x.fx ? ' fx' : ''}">${x.dl ? '<span class="dl">Scadenza · </span>' : ''}<span class="nm">${esc(x.n)}</span>${x.why ? '<small class="why">' + esc(x.why) + '</small>' : ''}</span>
     ${x.id ? `<span class="acts"><button class="mini${x.done ? ' on' : ''}" data-act="done" data-id="${x.id}" aria-label="Segna come fatto">✓</button><button class="mini" data-act="del" data-id="${x.id}" aria-label="Elimina">×</button></span>` : '<span></span>'}
   </li>`).join('') + '</ul>';
 }
@@ -115,21 +164,25 @@ const areaOpts = sel => Object.entries(AREE).map(([k, v]) => `<option value="${k
 function addForm(ds) {
   return `<form class="card" data-form="task"><h2>Aggiungi attività</h2>
   <input name="title" placeholder="Ripasso capitolo 4" required aria-label="Attività">
-  <div class="row"><input type="date" name="date" value="${ds}" aria-label="Giorno"><input type="time" name="time" aria-label="Ora (facoltativa)"><select name="area" aria-label="Area">${areaOpts('uni')}</select></div>
+  <div class="row"><input type="date" name="date" value="${ds}" aria-label="Giorno"><select name="area" aria-label="Area">${areaOpts('uni')}</select></div>
+  <div class="row"><label class="tl">Dalle<input type="time" name="time" aria-label="Ora di inizio (facoltativa)"></label><label class="tl">alle<input type="time" name="end" aria-label="Ora di fine (facoltativa)"></label></div>
+  <label class="cb"><input type="checkbox" name="allday"> Tutto il giorno</label>
   <label class="cb"><input type="checkbox" name="dl"> È una scadenza (esame, consegna)</label>
   <button class="primary">Aggiungi</button></form>`;
 }
 
 // ---------- Viste ----------
 function viewOggi() {
-  const d = new Date(), ds = iso(d), day = S.days[ds] || {}, h = day.h || {}, n = countDay(ds), w = d.getDay(), p = plan(w);
+  const d = new Date(), ds = iso(d), day = S.days[ds] || {}, h = day.h || {}, n = countDay(ds), w = d.getDay(), tr = trainOf(d);
+  const trHero = !tr ? 'giorno di riposo' : tr.skip ? 'allenamento saltato oggi' : 'allenamento: ' + esc(tr.n.toLowerCase()) + ' alle ' + esc(tr.t);
+  const trHab = !tr ? 'Oggi riposo: spunta se hai rispettato il piano' : tr.skip ? esc(tr.why) : 'In programma: ' + esc(tr.n) + ' alle ' + esc(tr.t) + (tr.why ? ' (spostato)' : '');
   const top = day.top || ['', '', ''], topd = day.topd || [false, false, false];
   const ph = ['La cosa più importante di oggi', 'Seconda priorità', 'Terza priorità'];
   return `<section class="hero"><p class="kick">${GG[w]}</p><h1>${d.getDate()} ${MM[d.getMonth()]}</h1>
-  <p class="sub">${n} di ${HAB.length} abitudini · ${isRest(w) ? 'giorno di riposo' : 'allenamento: ' + esc(p.name.toLowerCase()) + ' alle ' + esc(p.t)}</p></section>
+  <p class="sub">${n} di ${HAB.length} abitudini · ${trHero}</p></section>
   <section class="card"><div class="ch"><h2>Abitudini</h2><span class="meter" aria-label="${n} su ${HAB.length}"><i style="width:${Math.round(pctDay(ds) * 100)}%"></i></span></div>
   <ul class="habits">${HAB.map(([k, l]) => `<li><button class="hab${h[k] ? ' on' : ''}" data-act="hab" data-d="${ds}" data-k="${esc(k)}" aria-pressed="${!!h[k]}">
-    <span class="tick"></span><span class="hl">${esc(l)}${k === 'allen' ? `<small>${isRest(w) ? 'Oggi riposo: spunta se hai rispettato il piano' : 'In programma: ' + esc(p.name) + ' alle ' + esc(p.t)}</small>` : ''}</span>
+    <span class="tick"></span><span class="hl">${esc(l)}${k === 'allen' ? `<small>${trHab}</small>` : ''}</span>
     <span class="streak">${streak(k)}</span></button></li>`).join('')}</ul></section>
   <section class="card"><h2>3 priorità</h2>${[0, 1, 2].map(i => `<div class="pri${topd[i] ? ' on' : ''}"><button class="chk${topd[i] ? ' on' : ''}" data-act="topd" data-i="${i}" aria-label="Priorità ${i + 1} fatta" aria-pressed="${!!topd[i]}"></button>
     <input id="pri${i}" data-act="top" data-i="${i}" value="${esc(top[i])}" placeholder="${ph[i]}" aria-label="Priorità ${i + 1}"></div>`).join('')}</section>
@@ -243,7 +296,12 @@ app.addEventListener('submit', async e => {
     user = r.data.session.user; render(true); loadAll(); return;
   }
   const title = String(fd.get('title') || '').trim(); if (!title) return;
-  if (f.dataset.form === 'task') put('tasks', uid(), { title, date: fd.get('date') || iso(new Date()), time: fd.get('time') || '', area: fd.get('area') || 'pers', dl: !!fd.get('dl'), done: false });
+  if (f.dataset.form === 'task') {
+    let time = String(fd.get('time') || ''), end = String(fd.get('end') || '');
+    if (fd.get('allday')) { time = PL.from; end = PL.to; }
+    if (end && (!time || end <= time)) { flash('L’ora di fine deve essere dopo quella di inizio'); return; }
+    put('tasks', uid(), { title, date: fd.get('date') || iso(new Date()), time, end, area: fd.get('area') || 'pers', dl: !!fd.get('dl'), done: false });
+  }
   else put('goals', uid(), { title, month: f.dataset.m, area: fd.get('area') || 'pers', done: false });
   flash('Aggiunto');
 });
