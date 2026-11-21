@@ -259,6 +259,16 @@ const ICON = {
   more: '<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
+  inbox: '<path d="M4 13.5 6.5 5h11l2.5 8.5V19H4z"/><path d="M4 13.5h4.5l1.5 2.5h4l1.5-2.5H20"/>',
+  repeat: '<path d="M4 11a8 8 0 0 1 14-5l2 2M20 4v4h-4M20 13a8 8 0 0 1-14 5l-2-2M4 20v-4h4"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".8"/>',
+  bars: '<path d="M6 20v-6M12 20V6M18 20v-9"/>',
+  pin: '<path d="M12 21s-6.5-5.7-6.5-11a6.5 6.5 0 0 1 13 0c0 5.3-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  left: '<path d="m14.5 6-6 6 6 6"/>',
+  right: '<path d="m9.5 6 6 6-6 6"/>',
 };
 const svg = (n, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -293,7 +303,10 @@ function shellHead(v) {
     mese: [String(mf.getFullYear()), cap(MM[mf.getMonth()])],
   }[v];
   const seg = [['oggi', 'Giorno', `${GS[now.getDay()].toLowerCase()} ${now.getDate()}`], ['settimana', 'Settimana', weekRange(wm)], ['mese', 'Mese', MM[mf.getMonth()]]];
-  return `<header class="hd"><div class="tx"><p class="kick">${esc(head[0])}</p><h1>${esc(head[1])}</h1></div>
+  // Settimana e Mese: frecce per spostarsi e "oggi" per tornare al periodo attuale.
+  const nav = { settimana: ['wk', weekOff, 'Settimana'], mese: ['mo', monthOff, 'Mese'] }[v];
+  const kick = nav ? `<button class="kn" data-act="${nav[0]}" data-v="-1" aria-label="${nav[2]} precedente">${svg('left')}</button><span>${esc(head[0])}</span><button class="kn" data-act="${nav[0]}" data-v="1" aria-label="${nav[2]} successiva">${svg('right')}</button>${nav[1] ? `<button class="kn txt" data-act="${nav[0]}0">oggi</button>` : ''}` : esc(head[0]);
+  return `<header class="hd"><div class="tx"><p class="kick">${kick}</p><h1>${esc(head[1])}</h1></div>
     <button class="rbtn glass" data-act="menu" aria-label="Impostazioni, backup e promemoria">${svg('more')}${pushState === 'off' ? '<span class="pip"></span>' : ''}</button>
     <button class="rbtn glass" data-act="add" aria-label="Aggiungi attività">${svg('plus')}</button></header>
   <nav class="seg glass" aria-label="Livelli">${seg.map(([k, l, s]) => `<a href="#${k}"${k === v ? ' aria-current="page"' : ''}>${l}<small>${esc(s)}</small></a>`).join('')}</nav>`;
@@ -360,8 +373,73 @@ function panelBody(p) {
   if (p === 'tomorrow') return ['Prepara domani', tomorrowCard(addD(d, 1))];
   if (p === 'add') {
     const v = cur(), m = addD(monday(d), weekOff * 7);
-    const def = v === 'mese' && selDay ? selDay : v === 'settimana' && weekOff ? iso(m) : ds;
+    const def = sheet && sheet.d ? sheet.d : v === 'mese' && selDay ? selDay : v === 'settimana' && weekOff ? iso(m) : ds;
     return ['Aggiungi attività', addForm(def)];
+  }
+  // --- Settimana ---
+  if (p === 'whab') {
+    const days = weekDays(), today = iso(new Date());
+    return ['Abitudini della settimana', `<div class="scroll"><table class="grid">
+      <thead><tr><th></th>${days.map(d => `<th class="${iso(d) === today ? 'td' : ''}">${GS[d.getDay()]}<small>${d.getDate()}</small></th>`).join('')}</tr></thead>
+      <tbody>${HAB.map(([k, l]) => `<tr><th scope="row">${esc(l)}</th>${days.map(d => {
+        const dd = iso(d), on = S.days[dd]?.h?.[k];
+        return `<td><button class="dotb${on ? ' on' : ''}" data-act="hab" data-d="${dd}" data-k="${esc(k)}" aria-pressed="${!!on}" aria-label="${esc(l)}, ${GG[d.getDay()]} ${d.getDate()}"></button></td>`;
+      }).join('')}</tr>`).join('')}
+      <tr class="pct"><th scope="row">Totale</th>${days.map(d => { const dd = iso(d); return `<td>${dd > today ? '–' : Math.round(pctDay(dd) * 100) + '%'}</td>`; }).join('')}</tr></tbody></table></div>`];
+  }
+  if (p === 'wdays') {
+    const today = iso(new Date());
+    return ['Giorni della settimana', `<section class="days">${weekDays().map(d => `<div class="day${iso(d) === today ? ' today' : ''}"><h3>${GG[d.getDay()]} <span>${d.getDate()} ${MM[d.getMonth()].slice(0, 3)}</span></h3>${agenda(d)}</div>`).join('')}</section>`];
+  }
+  if (p === 'wtrain') {
+    const tr = trainingsOf(weekDays());
+    return ['Allenamenti della settimana', tr.length ? `<ul class="ag">${tr.map(x => `<li><span class="tm">${cap(DOW[x.d.getDay()])}<small>${x.d.getDate()}</small></span><span class="dot sport"></span>
+      <span class="tt">${esc(x.tr.n)} alle ${esc(x.tr.t)}${x.tr.why ? `<small class="why">${esc(x.tr.why)}</small>` : ''}</span>
+      <span class="acts"><button class="mini${x.done ? ' on' : ''}" data-act="hab" data-d="${x.ds}" data-k="allen" aria-pressed="${x.done}" aria-label="Allenamento fatto">✓</button><button class="mini" data-act="fx" data-d="${x.ds}" data-k="train" aria-label="Salta o sposta">⋯</button></span></li>`).join('')}</ul>
+      <p class="hint">✓ segna l'abitudine "Allenamento" di quel giorno; ⋯ salta o sposta solo quel giorno.</p>` : '<p class="empty">Nessun allenamento previsto questa settimana.</p>'];
+  }
+  if (p === 'someday') return ['Prima o poi', somedayCard().replace(/<h2>Prima o poi<\/h2>/, '')];
+  if (p === 'review') {
+    const days = weekDays(), tr = trainingsOf(days), st = habitStats(days), pct = pctOf(days);
+    const late = Object.values(S.tasks).filter(t => t.date && t.date < iso(new Date()) && !t.done).length;
+    const sd = Object.values(S.tasks).filter(t => !t.date && !t.done).length;
+    const done = reviewDone();
+    const items = [
+      ['Guarda le abitudini', `${pct === null ? '—' : pct + '%'} della settimana · ` + st.map(s => `${esc(shortHab(s.k, s.l))} ${s.n}/${s.of}`).join(', ')],
+      ['Allenamenti', `${tr.filter(x => x.done).length} fatti su ${tr.length} previsti`],
+      ['Cosa ha funzionato e cosa no', 'Una riga per ciascuno: cosa ripeti, cosa cambi.'],
+      ['Svuota "In sospeso"', late ? `${late} attività da spostare o cancellare` : 'Niente in sospeso'],
+      ['Scegli da "Prima o poi"', sd ? `${sd} voci: dai una data a 1 o 2` : 'La lista è vuota'],
+      ['Controlla la prossima settimana', 'Impegni fissi da saltare o spostare, scadenze in arrivo'],
+      ['Scrivi le priorità di lunedì', 'Le 3 cose più importanti per ripartire'],
+    ];
+    return ['Review della settimana', `<p class="sub" style="margin-bottom:8px">15 minuti, la domenica. Le spunte restano su questo telefono.</p>
+      <ul class="rvl">${items.map(([t, s], i) => `<li class="${done[i] ? 'done' : ''}"><button class="cbx${done[i] ? ' on' : ''}" data-act="rvchk" data-i="${i}" aria-pressed="${!!done[i]}" aria-label="${esc(t)}"></button><div><b>${t}</b><small>${s}</small></div></li>`).join('')}</ul>`];
+  }
+  // --- Mese ---
+  if (p === 'day') {
+    const sd = parse(selDay || iso(new Date()));
+    return [`${GG[sd.getDay()]} ${sd.getDate()} ${MM[sd.getMonth()]}`, `${agenda(sd)}<div class="row"><button class="ghost" data-act="addon" data-d="${iso(sd)}">+ Aggiungi a questo giorno</button></div>`];
+  }
+  if (p === 'deadlines') {
+    const { first, mk } = monthInfo(), today = iso(new Date());
+    const dls = Object.entries(S.tasks).filter(([, t]) => t.dl && t.date && (t.date.slice(0, 7) === mk || (monthOff === 0 && t.date >= today))).sort((a, b) => a[1].date.localeCompare(b[1].date));
+    return [`Scadenze di ${MM[first.getMonth()]}${monthOff === 0 ? ' e in arrivo' : ''}`, dls.length ? '<ul class="ag">' + dls.map(([id, t]) => { const dd = parse(t.date); return `<li class="${t.done ? 'done' : ''}"><span class="tm">${dd.getDate()} ${MM[dd.getMonth()].slice(0, 3)}</span><span class="dot" style="background:var(--solid)"></span><span class="tt">${taskName(id, t.title)}</span><span class="acts"><button class="mini${t.done ? ' on' : ''}" data-act="done" data-id="${id}" aria-label="Segna come fatto">✓</button></span></li>`; }).join('') + '</ul>'
+      : '<p class="empty">Nessuna scadenza. Aggiungile con + spuntando “È una scadenza”.</p>'];
+  }
+  if (p === 'goals') {
+    const { first, mk } = monthInfo(), goals = Object.entries(S.goals).filter(([, g]) => g.month === mk);
+    return [`Obiettivi di ${MM[first.getMonth()]}`, `${goals.length ? '<ul class="goals">' + goals.map(([id, g]) => `<li class="${g.done ? 'done' : ''}"><button class="chk${g.done ? ' on' : ''}" data-act="gdone" data-id="${id}" aria-label="Obiettivo raggiunto" aria-pressed="${!!g.done}"></button><span class="tt">${esc(g.title)}</span><button class="mini" data-act="gdel" data-id="${id}" aria-label="Elimina obiettivo">×</button></li>`).join('') + '</ul>' : '<p class="empty">Scegli uno o due obiettivi per questo mese, non di più.</p>'}
+      <form data-form="goal" data-m="${mk}"><div class="row"><input name="title" placeholder="3 allenamenti a settimana" required aria-label="Nuovo obiettivo"><select name="area" aria-label="Area">${areaOpts('sport')}</select><button class="primary">Aggiungi</button></div></form>`];
+  }
+  if (p === 'stats') {
+    const { first, days } = monthInfo(), st = habitStats(days);
+    return [`Statistiche di ${MM[first.getMonth()]}`, `<ul class="stl">${st.map(s => `<li><div class="stt"><b>${esc(s.l)}</b><span>${s.pct}%</span></div><div class="stb"><i style="width:${s.pct}%"></i></div>
+      <small>${s.n} giorni su ${s.of} · serie più lunga: ${s.best} ${s.best === 1 ? 'giorno' : 'giorni'}</small></li>`).join('')}</ul>`];
+  }
+  if (p === 'fixed') {
+    return ['Impegni fissi', `<ul class="ag">${fixedSummary().map(([n, w, t]) => `<li><span class="tm" style="white-space:normal;font-size:13px">${esc(w)}</span><span class="dot"></span><span class="tt">${esc(n)}${t ? `<small class="why">${esc(t)}</small>` : ''}</span><span></span></li>`).join('')}</ul>
+      <p class="hint">Si cambiano in config.js. Per saltarne o spostarne uno solo un giorno usa ⋯ nell'agenda di quel giorno.</p>`];
   }
   if (p === 'menu') {
     const pr = pushState === 'on' ? '<section class="card"><h2>Promemoria serale</h2><p class="sub">Attivi: ogni sera alle 21:30.</p><div class="row"><button class="ghost" data-act="pushtest">Invia notifica di prova</button></div></section>' : pushCard();
@@ -386,21 +464,54 @@ function lateCard(today) {
     <span class="acts"><button class="mini txt" data-act="mv" data-id="${id}" data-v="0" aria-label="Sposta a oggi">A oggi</button><button class="mini txt" data-act="mv" data-id="${id}" data-v="1" aria-label="Sposta a domani">A domani</button></span></li>`; }).join('')}</ul></section>`;
 }
 
+// ---------- Livello Settimana ----------
+const DOW = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+const weekDays = () => { const m = addD(monday(new Date()), weekOff * 7); return [...Array(7)].map((_, i) => addD(m, i)); };
+// Percentuale abitudini su un elenco di giorni (contano solo quelli fino a oggi).
+function pctOf(days) {
+  const today = iso(new Date()), past = days.filter(d => iso(d) <= today);
+  return past.length ? Math.round(past.reduce((s, d) => s + pctDay(iso(d)), 0) / past.length * 100) : null;
+}
+// Impegno principale di un giorno: un'attività tua, altrimenti un ricorrente, altrimenti l'allenamento.
+function mainOf(d) {
+  const it = dayPlan(d).filter(x => !x.skip && !x.uni);
+  const pick = it.find(x => x.id && !x.done) || it.find(x => x.fx && !x.train) || it.find(x => x.train) || it.find(x => x.id);
+  const sun = d.getDay() === 0;
+  // Nomi brevi per gli impegni fissi ("Laboratorio di urbanistica" → "Laboratorio", "Palestra (facoltativa)" → "Palestra").
+  const name = !pick ? '' : pick.id ? pick.n : pick.train ? pick.n.replace(/\s*\(.*\)$/, '') : pick.n.split(' ')[0];
+  const txt = pick ? name + (pick.train && pick.t && !sun ? ' ' + pick.t : '') : UNI.days.includes(d.getDay()) ? 'Università' : '—';
+  return sun ? txt + ' · Review' : txt;
+}
+// Allenamenti della settimana: previsti dal piano (esclusi i saltati) e fatti secondo l'abitudine "allen".
+function trainingsOf(days) {
+  const today = iso(new Date());
+  return days.map(d => ({ d, ds: iso(d), tr: trainOf(d) })).filter(x => x.tr && !x.tr.skip)
+    .map(x => ({ ...x, done: !!S.days[x.ds]?.h?.allen, future: x.ds > today }));
+}
 function viewSett() {
-  const today = iso(new Date()), m = addD(monday(new Date()), weekOff * 7), days = [...Array(7)].map((_, i) => addD(m, i)), e = days[6];
-  const lbl = m.getMonth() === e.getMonth() ? `${m.getDate()}–${e.getDate()} ${MM[e.getMonth()]}` : `${m.getDate()} ${MM[m.getMonth()].slice(0, 3)} – ${e.getDate()} ${MM[e.getMonth()].slice(0, 3)}`;
-  const inWeek = days.some(d => iso(d) === today);
-  return `<div class="navrow"><button data-act="wk" data-v="-1" aria-label="Settimana precedente">‹</button><h1>${lbl}</h1><button data-act="wk" data-v="1" aria-label="Settimana successiva">›</button></div>
-  <section class="card"><h2>Abitudini della settimana</h2><div class="scroll"><table class="grid">
-  <thead><tr><th></th>${days.map(d => `<th class="${iso(d) === today ? 'td' : ''}">${GS[d.getDay()]}<small>${d.getDate()}</small></th>`).join('')}</tr></thead>
-  <tbody>${HAB.map(([k, l]) => `<tr><th scope="row">${esc(l)}</th>${days.map(d => {
-    const ds = iso(d), on = S.days[ds]?.h?.[k];
-    return `<td><button class="dotb${on ? ' on' : ''}" data-act="hab" data-d="${ds}" data-k="${esc(k)}" aria-pressed="${!!on}" aria-label="${esc(l)}, ${GG[d.getDay()]} ${d.getDate()}"></button></td>`;
-  }).join('')}</tr>`).join('')}
-  <tr class="pct"><th scope="row">Totale</th>${days.map(d => { const ds = iso(d); return `<td>${ds > today ? '–' : Math.round(pctDay(ds) * 100) + '%'}</td>`; }).join('')}</tr></tbody></table></div></section>
-  <section class="days">${days.map(d => `<div class="day${iso(d) === today ? ' today' : ''}"><h3>${GG[d.getDay()]} <span>${d.getDate()}</span></h3>${agenda(d)}</div>`).join('')}</section>
-  ${somedayCard()}
-  ${addForm(inWeek ? today : iso(m))}${footer()}`;
+  const today = iso(new Date()), days = weekDays(), pct = pctOf(days);
+  // Abitudini: griglia pallini (prime 3 righe + "+N").
+  const rows = HAB.slice(0, 3), more = HAB.length - rows.length;
+  const hg = `<div class="hg"><span></span>${days.map(d => `<span class="hl1${iso(d) === today ? ' td' : ''}">${GS[d.getDay()].charAt(0)}</span>`).join('')}
+    ${rows.map(([k, l]) => `<span class="hn">${esc(shortHab(k, l))}</span>${days.map(d => { const ds = iso(d); return `<i class="pd2 ${ds > today ? 'fut' : S.days[ds]?.h?.[k] ? 'on' : ''}"></i>`; }).join('')}`).join('')}
+    ${more > 0 ? `<span class="hn faint">+${more}</span>` : ''}</div>`;
+  // Giorni: impegno principale.
+  const gi = `<ul class="gl">${days.map(d => { const ds = iso(d); return `<li class="${ds < today ? 'past' : ds === today ? 'td' : ''}"><b>${cap(DOW[d.getDay()])}</b><span>${esc(mainOf(d))}</span></li>`; }).join('')}</ul>`;
+  // Allenamenti: fatti / previsti.
+  const tr = trainingsOf(days), done = tr.filter(x => x.done).length;
+  const al = `<div class="big"><b>${done}</b><span>/${tr.length}</span></div><div class="tdots">${tr.map(x => `<i class="pd2 ${x.done ? 'on' : x.future ? 'fut' : ''}" title="${GG[x.d.getDay()]}"></i>`).join('')}</div>`;
+  // Prima o poi.
+  const sd = Object.entries(S.tasks).filter(([, t]) => !t.date && !t.done);
+  const pp = sd.length ? `<ul class="sl">${sd.slice(0, 2).map(([, t]) => `<li><b>${esc(t.title)}</b></li>`).join('')}</ul>${sd.length > 2 ? `<p class="small faint" style="margin:2px 0 0">+${sd.length - 2} altre</p>` : ''}`
+    : '<p class="small mutd" style="margin:0">Niente in lista.</p>';
+  // Review.
+  const sun = new Date().getDay() === 0 && weekOff === 0;
+  const rv = `<div class="pd"><p>${sun ? 'Oggi' : 'Domenica'}, 15 minuti.<br>Cosa ha funzionato e cosa no.</p><button class="pill${sun ? ' solid' : ''}" data-act="open" data-p="review">Apri</button></div>`;
+  return widget('a-hab', 'whab', 'habit', 'Abitudini', `<span class="meta">${pct === null ? '—' : pct + '%'}</span>`, hg)
+    + widget('a-gi', 'wdays', 'cal', 'Giorni', '', gi)
+    + widget('a-al', 'wtrain', 'dumbbell', 'Allenamenti', '', al)
+    + widget('a-pp', 'someday', 'inbox', 'Prima o poi', badge(sd.length), pp)
+    + widget('a-rv' + (sun ? ' hot' : ''), 'review', 'repeat', 'Review della settimana', '', rv);
 }
 // Attività senza data: da fare "prima o poi".
 function somedayCard() {
@@ -413,27 +524,91 @@ function somedayCard() {
   <form data-form="someday"><div class="row"><input name="title" placeholder="Riparare la bici" required aria-label="Nuova attività senza data"><select name="area" aria-label="Area">${areaOpts('pers')}</select><button class="primary">Aggiungi</button></div></form></section>`;
 }
 
-function viewMese() {
-  const now = new Date(), today = iso(now), first = new Date(now.getFullYear(), now.getMonth() + monthOff, 1);
+// Spunte della checklist della review: solo su questo telefono (localStorage), una lista per settimana.
+// Se la memoria del telefono non è disponibile, le spunte restano almeno finché l'app è aperta.
+const reviewKey = () => 'agenda-review-' + iso(weekDays()[0]), reviewMem = {};
+function reviewDone() {
+  try { const v = localStorage.getItem(reviewKey()); if (v) return JSON.parse(v); } catch (e) {}
+  return reviewMem[reviewKey()] || [];
+}
+function reviewToggle(i) {
+  const d = [...reviewDone()]; d[i] = !d[i]; reviewMem[reviewKey()] = d;
+  try { localStorage.setItem(reviewKey(), JSON.stringify(d)); } catch (e) {}
+  render(true);
+}
+
+// ---------- Livello Mese ----------
+function monthInfo() {
+  const now = new Date(), first = new Date(now.getFullYear(), now.getMonth() + monthOff, 1);
   const mk = first.getFullYear() + '-' + pad(first.getMonth() + 1), dim = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return { first, mk, dim, days: [...Array(dim)].map((_, i) => new Date(first.getFullYear(), first.getMonth(), i + 1)) };
+}
+const monthDeadlines = mk => Object.entries(S.tasks).filter(([, t]) => t.dl && t.date && t.date.slice(0, 7) === mk).sort((a, b) => a[1].date.localeCompare(b[1].date));
+// Per ogni abitudine: percentuale nel mese, giorni fatti e serie più lunga (solo fino a oggi).
+function habitStats(days) {
+  const today = iso(new Date()), past = days.filter(d => iso(d) <= today);
+  return HAB.map(([k, l]) => {
+    let n = 0, run = 0, best = 0;
+    for (const d of past) { if (S.days[iso(d)]?.h?.[k]) { n++; run++; best = Math.max(best, run); } else run = 0; }
+    return { k, l, n, of: past.length, pct: past.length ? Math.round(n / past.length * 100) : 0, best };
+  });
+}
+// Impegni fissi da config.js, riassunti in poche righe.
+// Giorni della settimana in forma breve, da lunedì; 3+ giorni di fila diventano "gio–sab".
+function daysTxt(arr) {
+  const m = [...new Set(arr)].map(w => (w + 6) % 7).sort((a, b) => a - b), name = i => DOW[(i + 1) % 7], out = [];
+  for (let i = 0; i < m.length;) {
+    let j = i; while (j + 1 < m.length && m[j + 1] === m[j] + 1) j++;
+    out.push(j - i >= 2 ? `${name(m[i])}–${name(m[j])}` : m.slice(i, j + 1).map(name).join(', '));
+    i = j + 1;
+  }
+  return out.join(', ');
+}
+function fixedSummary() {
+  const today = iso(new Date()), out = [];
+  if (UNI.days.length) out.push(['Università', daysTxt(UNI.days), `${UNI.start}–${UNI.end}`]);
+  for (const r of REC) {
+    if (r.to && r.to < today) continue;
+    const when = r.weekdays ? daysTxt(r.weekdays) : r.everyDays && r.anchor
+      ? (r.everyDays % 7 === 0 ? `ogni ${r.everyDays / 7 === 1 ? '' : r.everyDays / 7 + ' '}${DOW[parse(r.anchor).getDay()]}` : `ogni ${r.everyDays} giorni`) : '';
+    out.push([r.name, when, r.t ? r.t + (r.end ? '–' + r.end : '') : '']);
+  }
+  const by = {};
+  for (let w = 0; w < 7; w++) { const p = plan(w), nm = p.name.replace(/\s*\(.*\)$/, ''); if (p.t) (by[nm] = by[nm] || []).push(w); }
+  for (const [name, ws] of Object.entries(by)) out.push([name, daysTxt(ws), [...ws].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(w => `${DOW[w]} ${plan(w).t}`).join(', ')]);
+  return out;
+}
+function viewMese() {
+  const today = iso(new Date()), { first, mk, dim, days } = monthInfo();
   const start = monday(first), weeks = Math.ceil((((first.getDay() + 6) % 7) + dim) / 7);
-  if (!selDay || selDay.slice(0, 7) !== mk) selDay = today.slice(0, 7) === mk ? today : mk + '-01';
+  const dls = monthDeadlines(mk), dlDays = new Set(dls.filter(([, t]) => !t.done).map(([, t]) => t.date)), pct = pctOf(days);
+  // Calendario: più scuro = più abitudini; oggi in nero; pallino = scadenza.
   const cells = [...Array(weeks * 7)].map((_, i) => {
-    const d = addD(start, i), ds = iso(d), inm = d.getMonth() === first.getMonth();
-    const p = inm && ds <= today ? pctDay(ds) : 0, ts = inm ? tasksOn(ds) : [];
-    return `<button class="cell${inm ? '' : ' out'}${ds === today ? ' td' : ''}${ds === selDay ? ' sel' : ''}" style="--p:${p}" data-act="sel" data-d="${ds}" aria-label="${d.getDate()} ${MM[d.getMonth()]}"><span class="num">${d.getDate()}</span><span class="dots">${ts.slice(0, 4).map(t => `<i class="${t.dl ? 'dlx' : esc(t.a)}"></i>`).join('')}</span></button>`;
+    const d = addD(start, i), ds = iso(d), inm = d.getMonth() === first.getMonth(), p = inm && ds <= today ? pctDay(ds) : 0;
+    return `<button class="cc${inm ? '' : ' out'}${ds === today ? ' td' : ''}" style="--p:${p.toFixed(2)}" data-act="day" data-d="${ds}" aria-label="${d.getDate()} ${MM[d.getMonth()]}${dlDays.has(ds) ? ', scadenza' : ''}">${d.getDate()}${dlDays.has(ds) && inm ? '<i></i>' : ''}</button>`;
   }).join('');
-  const sd = parse(selDay);
-  const dls = Object.entries(S.tasks).filter(([, t]) => t.dl && t.date && t.date.slice(0, 7) === mk).sort((a, b) => a[1].date.localeCompare(b[1].date));
-  const goals = Object.entries(S.goals).filter(([, g]) => g.month === mk);
-  return `<div class="navrow"><button data-act="mo" data-v="-1" aria-label="Mese precedente">‹</button><h1>${MM[first.getMonth()]} ${first.getFullYear()}</h1><button data-act="mo" data-v="1" aria-label="Mese successivo">›</button></div>
-  <section class="card"><div class="cal">${['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map(x => `<span class="wd">${x}</span>`).join('')}${cells}</div>
-  <div class="legend"><span>Più è blu il giorno, più abitudini hai rispettato</span><span><i class="dot uni"></i>Università</span><span><i class="dot sport"></i>Sport</span><span><i class="dot lavoro"></i>Lavoro</span><span><i class="dot pers"></i>Personale</span><span><i class="dot eventi"></i>Eventi</span><span><i class="dot" style="background:var(--red)"></i>Scadenza</span></div></section>
-  <section class="card"><h2>${GG[sd.getDay()]} ${sd.getDate()} ${MM[sd.getMonth()]}</h2>${agenda(sd)}</section>
-  <section class="card"><h2>Scadenze del mese</h2>${dls.length ? '<ul class="ag">' + dls.map(([id, t]) => { const d = parse(t.date); return `<li class="${t.done ? 'done' : ''}"><span class="tm">${d.getDate()} ${MM[d.getMonth()].slice(0, 3)}</span><span class="dot" style="background:var(--red)"></span><span class="tt">${esc(t.title)}</span><span class="acts"><button class="mini${t.done ? ' on' : ''}" data-act="done" data-id="${id}" aria-label="Segna come fatto">✓</button></span></li>`; }).join('') + '</ul>' : '<p class="empty">Nessuna scadenza. Aggiungile da “Aggiungi attività” spuntando “È una scadenza”.</p>'}</section>
-  <section class="card"><h2>Obiettivi di ${MM[first.getMonth()]}</h2>
-  ${goals.length ? '<ul class="goals">' + goals.map(([id, g]) => `<li class="${g.done ? 'done' : ''}"><button class="chk${g.done ? ' on' : ''}" data-act="gdone" data-id="${id}" aria-label="Obiettivo raggiunto" aria-pressed="${!!g.done}"></button><i class="dot ${esc(g.area || 'pers')}"></i><span class="tt">${esc(g.title)}</span><button class="mini" data-act="gdel" data-id="${id}" aria-label="Elimina obiettivo">×</button></li>`).join('') + '</ul>' : '<p class="empty">Scegli uno o due obiettivi per questo mese, non di più.</p>'}
-  <form data-form="goal" data-m="${mk}"><div class="row"><input name="title" placeholder="3 allenamenti a settimana per tutto il mese" required aria-label="Nuovo obiettivo"><select name="area" aria-label="Area">${areaOpts('sport')}</select><button class="primary">Aggiungi</button></div></form></section>${footer()}`;
+  const cal = `<div class="calw" style="--wk:${weeks}">${['L', 'M', 'M', 'G', 'V', 'S', 'D'].map(x => `<span class="wd2">${x}</span>`).join('')}${cells}</div>
+    <p class="small faint" style="margin:6px 0 0">Più scuro = più abitudini rispettate · pallino = scadenza</p>`;
+  // Scadenze.
+  // Nel mese corrente anche le prossime scadenze in arrivo (es. all'inizio del mese dopo).
+  const open = Object.entries(S.tasks).filter(([, t]) => t.dl && t.date && !t.done && (t.date.slice(0, 7) === mk || (monthOff === 0 && t.date >= today))).sort((a, b) => a[1].date.localeCompare(b[1].date));
+  const next = open.filter(([, t]) => t.date >= today).concat(open.filter(([, t]) => t.date < today));
+  const sc = next.length ? `<ul class="sl">${next.slice(0, 2).map(([, t]) => { const d = parse(t.date); return `<li><b><strong>${d.getDate()} ${MM[d.getMonth()].slice(0, 3)}</strong> · ${esc(t.title)}</b></li>`; }).join('')}</ul>`
+    : '<p class="small mutd" style="margin:0">Nessuna scadenza.</p>';
+  // Obiettivi spuntabili.
+  const goals = Object.entries(S.goals).filter(([, g]) => g.month === mk), gd = goals.filter(([, g]) => g.done).length;
+  const ob = goals.length ? `<ul class="pl">${goals.map(([id, g]) => `<li class="${g.done ? 'done' : ''}"><button class="cbx${g.done ? ' on' : ''}" data-act="gdone" data-id="${id}" aria-pressed="${!!g.done}" aria-label="Raggiunto: ${esc(g.title)}"></button><span class="x">${esc(g.title)}</span></li>`).join('')}</ul>`
+    : '<p class="small mutd" style="margin:0">Scegli 1 o 2 obiettivi.</p>';
+  // Statistiche: barre per abitudine.
+  const st = habitStats(days);
+  const bars = `<div class="bars">${st.map(s => `<div class="bar"><i style="height:${Math.max(4, s.pct)}%"></i><span>${esc(cap(s.k).slice(0, 2))}</span></div>`).join('')}</div>`;
+  // Impegni fissi.
+  const fx = `<ul class="fl">${fixedSummary().filter(([n]) => n !== 'Università').map(([n, w]) => `<li>${esc(n.split(' ')[0])} · ${esc(w)}</li>`).join('')}</ul>`;
+  return widget('a-cal', 'day', 'cal', 'Calendario', `<span class="meta">abitudini ${pct === null ? '—' : pct + '%'}</span>`, cal)
+    + widget('a-sc', 'deadlines', 'flag', 'Scadenze', badge(open.length), sc)
+    + widget('a-ob', 'goals', 'target', 'Obiettivi', goals.length ? `<span class="meta">${gd} di ${goals.length}</span>` : '', ob)
+    + widget('a-st', 'stats', 'bars', 'Statistiche', '', bars)
+    + widget('a-fx', 'fixed', 'pin', 'Impegni fissi', '', fx);
 }
 
 // Modulo che si apre sopra la pagina (modifica attività, opzioni impegni fissi).
@@ -484,7 +659,7 @@ function viewLogin() {
 }
 
 const VIEWS = { oggi: viewGiorno, settimana: viewSett, mese: viewMese };
-const NEW_LAYOUT = { oggi: true };   // livelli già ridisegnati a widget (gli altri: tappe 3 e 4)
+const NEW_LAYOUT = { oggi: true, settimana: true, mese: true };   // livelli ridisegnati a widget
 function cur() { const h = location.hash.slice(1); return VIEWS[h] ? h : 'oggi'; }
 function render(force) {
   const a = document.activeElement;
@@ -504,6 +679,11 @@ app.addEventListener('click', async e => {
   if (a === 'hab') { const ds = b.dataset.d, h = { ...(S.days[ds]?.h || {}) }; h[b.dataset.k] = !h[b.dataset.k]; popKey = h[b.dataset.k] ? ds + b.dataset.k : ''; setDay(ds, { h }); popKey = ''; }
   else if (a === 'open') { sheet = { kind: 'panel', p: b.dataset.p }; render(true); }
   else if (a === 'add' || a === 'menu') { sheet = { kind: 'panel', p: a }; render(true); }
+  else if (a === 'day') { selDay = b.dataset.d; sheet = { kind: 'panel', p: 'day' }; render(true); }
+  else if (a === 'addon') { selDay = b.dataset.d; sheet = { kind: 'panel', p: 'add', d: b.dataset.d }; render(true); }
+  else if (a === 'rvchk') reviewToggle(+b.dataset.i);
+  else if (a === 'wk0') { weekOff = 0; render(true); }
+  else if (a === 'mo0') { monthOff = 0; render(true); }
   else if (a === 'topd') { const ds = iso(new Date()), td = [...(S.days[ds]?.topd || [false, false, false])]; td[+b.dataset.i] = !td[+b.dataset.i]; setDay(ds, { topd: td }); }
   else if (a === 'done' && S.tasks[id]) put('tasks', id, { ...S.tasks[id], done: !S.tasks[id].done });
   else if (a === 'del' && S.tasks[id]) { lastDel = ['tasks', id, S.tasks[id]]; put('tasks', id, null); flash('Attività eliminata', true); }

@@ -143,11 +143,73 @@ svg.i{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-l
 .pill.solid{background:var(--solid);color:var(--onsolid);box-shadow:0 4px 12px -4px rgba(0,0,0,.4)}
 .w.hot{background:var(--glass-hi);box-shadow:var(--shadow),inset 0 0 0 1.5px var(--solid)}
 
+/* Frecce accanto alla data (Settimana, Mese) */
+.hd .kick{display:flex;align-items:center;gap:6px}
+.kn{position:relative;flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;border:0;padding:0;background:var(--chip);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);cursor:pointer}
+.kn::before{content:"";position:absolute;inset:-11px}
+.kn svg{width:14px;height:14px}
+.kn.txt{width:auto;padding:0 8px;font-size:12px;font-weight:700;border-radius:11px}
+
+/* Settimana: disposizione */
+.board.settimana{grid-template-rows:minmax(0,.92fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.62fr);
+  grid-template-areas:"hab hab" "gi al" "gi pp" "rv rv"}
+.board.settimana .a-hab{grid-area:hab}.a-gi{grid-area:gi}.a-al{grid-area:al}.a-pp{grid-area:pp}.a-rv{grid-area:rv}
+.hg{flex:1;display:grid;grid-template-columns:4.4em repeat(7,minmax(0,1fr));align-items:center;justify-items:center;row-gap:2px;font-size:11.5px}
+.hg .hl1{color:var(--mut);font-weight:600;font-size:11px}
+.hg .hl1.td{color:var(--ink);font-weight:800}
+.hg .hn{justify-self:start;color:var(--mut);font-weight:500;white-space:nowrap}
+.pd2{display:block;width:11px;height:11px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--empty)}
+.pd2.on{background:var(--solid);box-shadow:none}
+.pd2.fut{box-shadow:none;border:1.5px dashed var(--empty)}
+.gl{display:flex;flex-direction:column;flex:1;justify-content:space-between}
+.gl li{display:grid;grid-template-columns:2.6em minmax(0,1fr);gap:6px;font-size:13px;padding:3px 0;border-bottom:1px solid var(--line)}
+.gl li:last-child{border-bottom:0}
+.gl li b{font-weight:700}
+.gl li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gl li.past{color:var(--faint)}.gl li.past b{text-decoration:line-through}
+.gl li.td b,.gl li.td span{font-weight:800}
+.big{display:flex;align-items:baseline;gap:2px;margin:2px 0 8px}
+.big b{font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.big span{font-size:18px;color:var(--mut);font-weight:600}
+.tdots{display:flex;flex-wrap:wrap;gap:6px}
+.tdots .pd2{width:16px;height:16px}
+
+/* Mese: disposizione */
+.board.mese{grid-template-rows:minmax(0,1.15fr) minmax(0,1.15fr) minmax(0,.85fr) minmax(0,.85fr);
+  grid-template-areas:"cal cal" "cal cal" "sc ob" "st fx"}
+.a-cal{grid-area:cal}.a-sc{grid-area:sc}.a-ob{grid-area:ob}.a-st{grid-area:st}.a-fx{grid-area:fx}
+.calw{flex:1;min-height:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:auto repeat(var(--wk),minmax(0,1fr));gap:4px}
+.wd2{text-align:center;font-size:11px;font-weight:600;color:var(--mut)}
+.cc{position:relative;border:0;border-radius:9px;padding:0;min-height:0;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);
+  background:color-mix(in srgb,var(--solid) calc(var(--p) * 34%),var(--glass-hi));display:grid;place-items:center}
+.cc.out{background:transparent;color:var(--faint);font-weight:500}
+.cc.td{background:var(--solid);color:var(--onsolid);font-weight:800}
+.cc i{position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:currentColor}
+.bars{flex:1;display:flex;align-items:flex-end;justify-content:space-between;gap:6px;min-height:0}
+.bar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px}
+.bar i{display:block;width:100%;max-width:22px;border-radius:5px 5px 3px 3px;background:var(--solid);opacity:.85}
+.bar span{font-size:10.5px;color:var(--mut);font-weight:600}
+.fl li{font-size:12.5px;line-height:1.35;padding:1px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut)}
+.fl li::first-line{color:var(--ink)}
+.sl li b strong{font-weight:800}
+
+/* Pannelli: review e statistiche */
+.rvl li{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.rvl li:last-child{border-bottom:0}
+.rvl .cbx{margin-top:2px;width:22px;height:22px;border-radius:7px}
+.rvl b{display:block;font-weight:600}.rvl small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
+.rvl li.done b{text-decoration:line-through;color:var(--mut)}
+.stl li{padding:10px 0;border-bottom:1px solid var(--line)}.stl li:last-child{border-bottom:0}
+.stt{display:flex;justify-content:space-between;font-size:15px}.stt span{font-weight:800}
+.stb{height:8px;border-radius:4px;background:var(--line);margin:6px 0 4px;overflow:hidden}.stb i{display:block;height:100%;background:var(--solid);border-radius:4px}
+.stl small{color:var(--mut);font-size:12.5px}
+
 /* Schermi piccoli (es. iPhone SE): si può scorrere */
 @media (max-height:720px){
   .shell{height:auto;min-height:100dvh;max-height:none}
-  .board.oggi{grid-template-rows:auto;grid-auto-rows:minmax(150px,auto)}
-  .board.oggi .a-hab{min-height:128px}.board.oggi .a-pd{min-height:96px}
+  .board.oggi,.board.settimana,.board.mese{grid-template-rows:auto;grid-auto-rows:minmax(150px,auto)}
+  .board.oggi .a-hab{min-height:128px}.board .a-pd,.board .a-rv{min-height:96px}
+  .board.mese .a-cal{min-height:330px}.board.settimana .a-gi{min-height:300px}
 }
 @media (min-width:700px){.shell{padding-top:28px}}
 
