@@ -33,10 +33,10 @@ const app = document.getElementById('app'), note = document.getElementById('note
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
 // Versione mostrata in fondo alla pagina: aggiornala insieme ai "?v=" in index.html a ogni pubblicazione.
-const VERSION = '2026-11-21.2';
+const VERSION = '2026-11-21.3';
 const chain = {};
 
-function flash(msg, undo) { tmsg.textContent = msg; tundo.hidden = !undo; toast.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => toast.classList.remove('show'), undo ? 5000 : 1800); }
+function flash(msg, undo, ms) { tmsg.textContent = msg; tundo.hidden = !undo; toast.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => toast.classList.remove('show'), ms || (undo ? 5000 : 1800)); }
 function cacheSave() { try { localStorage.setItem(CACHE, JSON.stringify(S)); } catch (e) {} }
 function cacheLoad() { try { const v = JSON.parse(localStorage.getItem(CACHE) || 'null'); if (v) for (const k of ['days', 'tasks', 'goals']) S[k] = v[k] || {}; } catch (e) {} }
 
@@ -107,12 +107,13 @@ async function pushOn() {
     const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(C.vapidPublicKey) });
     await saveSub(sub);
     pushState = 'on'; render(true); flash('Promemoria attivati: ogni sera alle 21:30');
-  } catch (e) { console.error(e); flash('Attivazione non riuscita: riprova'); }
+  } catch (e) { console.error(e); flash('Attivazione non riuscita: ' + String((e && (e.message || e.name)) || e).slice(0, 90), false, 8000); }
 }
 async function pushTest() {
   flash('Invio in corso…');
   const { data, error } = await sb.functions.invoke('promemoria', { body: { mode: 'test' } });
-  if (error) { console.error(error); flash('Prova non riuscita: controlla la Edge Function'); return; }
+  if (error) { console.error(error); flash('Prova non riuscita: ' + String(error.message || error).slice(0, 90), false, 8000); return; }
+  if (data && data.errors && data.errors.length && !data.sent) { flash('Prova non riuscita: ' + String(data.errors[0]).slice(0, 90), false, 8000); return; }
   flash(data && data.sent ? 'Inviata: arriva tra pochi secondi' : 'Nessun dispositivo iscritto');
 }
 // Riquadro visibile finché i promemoria non sono attivi (con la spiegazione se non si può).

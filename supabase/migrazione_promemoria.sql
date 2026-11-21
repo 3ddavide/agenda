@@ -12,6 +12,7 @@ create table if not exists public.push_subs (
 create index if not exists push_subs_user on public.push_subs (user_id);
 
 alter table public.push_subs enable row level security;
+grant select, insert, update, delete on table public.push_subs to authenticated;
 
 drop policy if exists "solo le mie iscrizioni" on public.push_subs;
 create policy "solo le mie iscrizioni" on public.push_subs
