@@ -1,2 +1,5 @@
 # Segreti locali (es. chiave privata VAPID): non devono MAI finire su GitHub.
 .segreti/
+
+# Cartella temporanea per le anteprime e le prove: non va pubblicata.
+_prova/
