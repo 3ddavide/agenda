@@ -46,8 +46,9 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
   Giorni (alto, impegno principale per giorno: `mainOf`), Allenamenti (fatti/previsti da piano
   in config.js + abitudine `allen`), Prima o poi, Review della settimana (checklist; spunte
   salvate SOLO nel telefono in localStorage `agenda-review-<lunedì>`).
-- **Mese** (`viewMese`): Calendario 2×2 (sfondo più scuro = più abitudini, oggi nero, pallino
-  = scadenza, tocco = pannello del giorno), Scadenze (del mese + in arrivo), Obiettivi
+- **Mese** (`viewMese`): Calendario 2×2 (sfondo più scuro = più abitudini, oggi nero, un
+  segno per attività inserita (`dayMarks`: pallino = impegno, lineetta = scadenza aperta, max 4
+  e poi "+"; gli impegni fissi non contano), tocco = pannello del giorno), Scadenze (del mese + in arrivo), Obiettivi
   (spuntabili), Statistiche (barre per abitudine), Impegni fissi (riassunto da config.js).
 - **Pannelli** (`sheetView`, `panelBody`, `panelSub`): si fermano sotto il selettore, che
   resta visibile; si chiudono con ✕, tocco fuori, Esc, trascinando in giù; cambiare livello
@@ -116,7 +117,8 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
   `:root`, ridefinite per il tema scuro sia in `prefers-color-scheme: dark` sia in
   `[data-theme=dark]`. Bersagli tattili ≥ 44px; margini con `env(safe-area-inset-*)`.
 - Prima di pubblicare un cambio d'interfaccia, verifica che i tre livelli stiano in una
-  schermata a 390 × 844 e 375 × 812, in chiaro e in scuro (anteprima in `_prova/`).
+  schermata a 390 × 844 e 375 × 812, in chiaro e in scuro (anteprima in `_prova/`), **anche
+  simulando i margini dell'iPhone** (padding di `.shell` + 47/34 px e + 50/34 px): nel browser sono zero.
 
 ## Idee per il futuro (agenti)
 

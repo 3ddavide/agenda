@@ -33,7 +33,7 @@ const app = document.getElementById('app'), note = document.getElementById('note
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
 // Versione mostrata in fondo alla pagina: aggiornala insieme ai "?v=" in index.html a ogni pubblicazione.
-const VERSION = '2026-11-22.1';
+const VERSION = '2026-11-22.2';
 const chain = {};
 
 function flash(msg, undo, ms) { tmsg.textContent = msg; tundo.hidden = !undo; toast.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => toast.classList.remove('show'), ms || (undo ? 5000 : 1800)); }
@@ -604,7 +604,9 @@ function monthInfo() {
   const mk = first.getFullYear() + '-' + pad(first.getMonth() + 1), dim = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   return { first, mk, dim, days: [...Array(dim)].map((_, i) => new Date(first.getFullYear(), first.getMonth(), i + 1)) };
 }
-const monthDeadlines = mk => Object.entries(S.tasks).filter(([, t]) => t.dl && t.date && t.date.slice(0, 7) === mk).sort((a, b) => a[1].date.localeCompare(b[1].date));
+// Segni sotto il numero nel calendario: lineette (scadenze aperte) poi pallini, al massimo MAX_MARKS e "+".
+const MAX_MARKS = 4;
+const dayMarks = (n, nd) => `<span class="marks" aria-hidden="true">${[...Array(Math.min(n, MAX_MARKS))].map((_, i) => `<i class="mk${i < nd ? ' dd' : ''}"></i>`).join('')}${n > MAX_MARKS ? '<b>+</b>' : ''}</span>`;
 // Per ogni abitudine: percentuale nel mese, giorni fatti e serie più lunga (solo fino a oggi).
 function habitStats(days) {
   const today = iso(new Date()), past = days.filter(d => iso(d) <= today);
@@ -642,14 +644,17 @@ function fixedSummary() {
 function viewMese() {
   const today = iso(new Date()), { first, mk, dim, days } = monthInfo();
   const start = monday(first), weeks = Math.ceil((((first.getDay() + 6) % 7) + dim) / 7);
-  const dls = monthDeadlines(mk), dlDays = new Set(dls.filter(([, t]) => !t.done).map(([, t]) => t.date)), pct = pctOf(days);
-  // Calendario: più scuro = più abitudini; oggi in nero; pallino = scadenza.
+  const pct = pctOf(days), byDay = {};
+  for (const t of Object.values(S.tasks)) if (t.date) (byDay[t.date] = byDay[t.date] || []).push(t);
+  // Calendario: più scuro = più abitudini; oggi in nero; sotto il numero un segno per attività inserita.
   const cells = [...Array(weeks * 7)].map((_, i) => {
     const d = addD(start, i), ds = iso(d), inm = d.getMonth() === first.getMonth(), p = inm && ds <= today ? pctDay(ds) : 0;
-    return `<button class="cc${inm ? '' : ' out'}${ds === today ? ' td' : ''}" style="--p:${p.toFixed(2)}" data-act="day" data-d="${ds}" aria-label="${d.getDate()} ${MM[d.getMonth()]}${dlDays.has(ds) ? ', scadenza' : ''}">${d.getDate()}${dlDays.has(ds) && inm ? '<i></i>' : ''}</button>`;
+    const list = inm ? byDay[ds] || [] : [], nd = list.filter(t => t.dl && !t.done).length;
+    const label = `${d.getDate()} ${MM[d.getMonth()]}${list.length ? `, ${impegni(list.length)}` : ''}${nd ? `, ${nd === 1 ? '1 scadenza' : nd + ' scadenze'}` : ''}`;
+    return `<button class="cc${inm ? '' : ' out'}${ds === today ? ' td' : ''}" style="--p:${p.toFixed(2)}" data-act="day" data-d="${ds}" aria-label="${label}">${d.getDate()}${dayMarks(list.length, nd)}</button>`;
   }).join('');
   const cal = `<div class="calw" style="--wk:${weeks}">${['L', 'M', 'M', 'G', 'V', 'S', 'D'].map(x => `<span class="wd2">${x}</span>`).join('')}${cells}</div>
-    <p class="small faint" style="margin:6px 0 0">Più scuro = più abitudini rispettate · pallino = scadenza</p>`;
+    <p class="cleg small faint"><span>Più scuro = più abitudini</span><span><i class="mk"></i>impegno</span><span><i class="mk dd"></i>scadenza</span></p>`;
   // Scadenze.
   // Nel mese corrente anche le prossime scadenze in arrivo (es. all'inizio del mese dopo).
   const open = Object.entries(S.tasks).filter(([, t]) => t.dl && t.date && !t.done && (t.date.slice(0, 7) === mk || (monthOff === 0 && t.date >= today))).sort((a, b) => a[1].date.localeCompare(b[1].date));
