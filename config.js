@@ -24,10 +24,11 @@ window.AGENDA_CONFIG = {
   // Università: giorni (0 = domenica, 1 = lunedì … 6 = sabato) e orari.
   uni: { days: [1, 2, 3, 4, 5], start: "09:00", end: "20:00" },
 
-  // Riorganizzazione automatica della giornata: se aggiungi un'attività con orario di
-  // inizio e fine che si sovrappone a un impegno spostabile (allenamenti, impegni con
-  // move: true), l'app lo sposta nel buco libero più vicino tra "from" e "to".
-  // trainingDur / defaultDur = durata in minuti quando non c'è un orario di fine.
+  // Riorganizzazione automatica della giornata: se aggiungi un'attività con un orario che
+  // si sovrappone a un impegno spostabile (allenamenti, impegni con move: true), l'app lo
+  // sposta nel buco libero più vicino tra "from" e "to". Arrivo e rientro si adattano da soli.
+  // trainingDur / defaultDur = durata in minuti quando non c'è un orario di fine
+  // (trainingDur vale per allenamenti e attività di area sport, defaultDur per il resto).
   planner: { from: "07:00", to: "22:30", step: 15, trainingDur: 90, defaultDur: 60 },
 
   // Allenamenti per giorno della settimana. t = orario, null = riposo.

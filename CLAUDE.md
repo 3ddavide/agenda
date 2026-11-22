@@ -86,9 +86,15 @@ Pubblicata come sito statico su GitHub Pages; i dati stanno su Supabase.
   (`user_id`, `p256dh`, `auth`), con RLS come le altre tabelle.
 - Gli impegni fissi (università, laboratorio, allenamenti, pulizia camera) NON sono nel
   database: vengono calcolati da `config.js` ogni volta che si apre l'app.
-- Riorganizzazione (`dayPlan` in `app.js`): se un'attività con fascia oraria si sovrappone a un
-  impegno fisso spostabile (allenamenti, `move: true`), questo va nel buco libero più vicino
-  dentro `planner.from`–`planner.to`; università e laboratorio non si spostano ma vengono segnati.
+- Riorganizzazione (`dayPlan` in `app.js`), solo calcolata e mai salvata:
+  - attività senza ora di fine: durata stimata (`trainingDur` per area sport, altrimenti
+    `defaultDur`); le scadenze senza fine non occupano tempo;
+  - impegno fisso spostabile sovrapposto (allenamenti, `move: true`): va nel buco libero più
+    vicino dentro `planner.from`–`planner.to`; il laboratorio non si sposta ma viene segnato;
+  - università (`fitUni`): l'arrivo slitta se l'inizio è coperto, l'uscita anticipata è segnalata;
+    le attività di area `uni` non sono in conflitto con l'università;
+  - rientro a casa (`fitReturn`, calcolato per ultimo): slitta alla fine degli impegni che seguono
+    entro 30 minuti; sparisce se l'università è saltata o se si finisce dopo mezzanotte.
 
 ## Regole
 

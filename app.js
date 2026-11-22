@@ -33,7 +33,7 @@ const app = document.getElementById('app'), note = document.getElementById('note
 const toast = document.getElementById('toast'), tmsg = document.getElementById('tmsg'), tundo = document.getElementById('tundo');
 const CACHE = 'agenda-cache-v1';
 // Versione mostrata in fondo alla pagina: aggiornala insieme ai "?v=" in index.html a ogni pubblicazione.
-const VERSION = '2026-11-21.4';
+const VERSION = '2026-11-22.1';
 const chain = {};
 
 function flash(msg, undo, ms) { tmsg.textContent = msg; tundo.hidden = !undo; toast.classList.add('show'); clearTimeout(flash.t); flash.t = setTimeout(() => toast.classList.remove('show'), ms || (undo ? 5000 : 1800)); }
@@ -175,6 +175,8 @@ function tasksOn(ds) {
   return Object.entries(S.tasks).filter(([, t]) => t.date === ds).map(([id, t]) => {
     const x = { id, t: t.time || '', e: t.end || '', n: t.title, a: t.area || 'pers', done: !!t.done, dl: !!t.dl };
     if (x.t && x.e && x.e > x.t) { x.rs = toMin(x.t); x.re = toMin(x.e); }
+    // Senza ora di fine la durata è stimata (le scadenze invece non occupano tempo).
+    else if (x.t && !x.dl) { x.rs = toMin(x.t); x.re = x.rs + (x.a === 'sport' ? PL.trainingDur : PL.defaultDur); x.est = true; }
     return x;
   });
 }
@@ -187,19 +189,53 @@ function freeSlot(blocks, len, pref) {
   }
   return best;
 }
-// La giornata completa: impegni fissi riorganizzati in base alle attività con fascia oraria.
+const GO_HOME_GAP = 30;   // minuti: se il prossimo impegno inizia prima, non si passa da casa
+const names = list => list.map(b => b.n + (b.est ? ' (durata stimata)' : '')).join(', ');
+// Accorcia l'università se altri impegni ne coprono l'inizio o la fine.
+function fitUni(arrivo, out) {
+  let start = arrivo.rs, end = arrivo.re;
+  const before = [], after = [];
+  for (let b; (b = out.find(b => b.rs <= start && b.re > start));) { start = b.re; before.push(b); }
+  for (let b; (b = out.find(b => b.rs < end && b.re >= end));) { end = b.rs; after.push(b); }
+  if (start >= end) { arrivo.skip = true; arrivo.why = 'Saltato per ' + names([...new Set([...before, ...after])]); return; }
+  const why = [];
+  if (before.length) { why.push(`Posticipato dalle ${arrivo.t} per ${names(before)}`); arrivo.t = toHM(start); }
+  if (after.length) why.push(`Esci alle ${toHM(end)} per ${names(after)}`);
+  arrivo.rs = start; arrivo.re = end;
+  if (why.length) arrivo.why = why.join(' · ');
+}
+// Il rientro slitta alla fine di ciò che segue l'università; si elimina se non ha senso.
+function fitReturn(rientro, arrivo, fx, busy) {
+  if (arrivo.skip) { rientro.gone = true; return; }
+  const others = fx.filter(x => x.rs != null && !x.uni && !x.skip);
+  let home = toMin(rientro.t);
+  const chain = [];
+  for (;;) {
+    // Lo fanno slittare solo attività e impegni spostati; una volta slittato, conta tutto ciò che segue.
+    const list = [...busy, ...(chain.length ? others : others.filter(x => x.moved || x.ov))];
+    const next = list.find(x => x.rs < home + GO_HOME_GAP && x.re > home);
+    if (!next) break;
+    home = next.re; chain.push(next);
+  }
+  if (!chain.length) return;
+  if (home >= 24 * 60) { rientro.gone = true; return; }
+  rientro.why = `Spostato dalle ${rientro.t} per ${names(chain)}`;
+  rientro.t = toHM(home);
+}
+// La giornata completa: impegni fissi adattati alle attività con un orario.
 function dayPlan(d) {
   const tasks = tasksOn(iso(d)), fx = fixed(d), busy = tasks.filter(x => x.rs != null);
-  const names = list => list.map(b => b.n).join(', ');
+  // Le attività di area Università si fanno lì: non sono in conflitto con l'università.
+  const outside = busy.filter(x => x.a !== 'uni');
+  const arrivo = fx.find(x => x.uni && x.rs != null), rientro = fx.find(x => x.uni && x.rs == null);
+  if (arrivo) fitUni(arrivo, outside);
   // 1) Impegni fissi non spostabili (università, laboratorio): restano, ma segnalati.
   for (const x of fx) if (x.rs != null && !x.mv && !x.skip) {
-    const c = busy.filter(b => overlaps(x, b));
+    const c = (x.uni ? outside : busy).filter(b => overlaps(x, b));
     if (!c.length) continue;
     x.skip = c.some(b => b.rs <= x.rs && b.re >= x.re);
     x.why = (x.why ? x.why + ' · ' : '') + (x.skip ? 'Saltato per ' : 'Sovrapposto a ') + names(c);
   }
-  const arrivo = fx.find(x => x.uni && x.rs != null);
-  for (const x of fx) if (x.uni && x.rs == null && arrivo?.skip) { x.skip = true; x.why = arrivo.why; }
   // 2) Impegni spostabili (allenamenti, pulizia): se toccano un'attività, si spostano.
   const clash = x => busy.filter(b => overlaps(x, b));
   const toMove = fx.filter(x => x.rs != null && x.mv && !x.skip && clash(x).length);
@@ -208,10 +244,12 @@ function dayPlan(d) {
     const c = clash(x), len = x.re - x.rs, s = freeSlot(blocks, len, x.rs);
     if (s === null) { x.skip = true; x.why = 'Saltato per ' + names(c) + ': nessun orario libero'; continue; }
     x.why = 'Spostato dalle ' + x.t + ' per ' + names(c);
-    x.t = toHM(s); if (x.e) x.e = toHM(s + len); x.rs = s; x.re = s + len;
+    x.t = toHM(s); if (x.e) x.e = toHM(s + len); x.rs = s; x.re = s + len; x.moved = true;
     blocks.push(x);
   }
-  return [...fx, ...tasks].sort((a, b) => (a.t || '99').localeCompare(b.t || '99'));
+  // 3) Il rientro va calcolato per ultimo, quando gli altri orari sono definitivi.
+  if (arrivo && rientro) fitReturn(rientro, arrivo, fx, busy);
+  return [...fx.filter(x => !x.gone), ...tasks].sort((a, b) => (a.t || '99').localeCompare(b.t || '99'));
 }
 const trainOf = d => dayPlan(d).find(x => x.train) || null;
 function countDay(ds) { const h = S.days[ds]?.h || {}; return HAB.filter(([k]) => h[k]).length; }
